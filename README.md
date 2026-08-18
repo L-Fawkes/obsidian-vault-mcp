@@ -66,15 +66,34 @@ to an existing note, have Claude read it first, then write back the full
 updated content. `delete_note` is a real, permanent git commit; it's worth
 asking Claude to confirm with you before deleting anything.
 
-## 5. (Optional) Graphify
-Run locally whenever you want:
-```
-pip install graphifyy --break-system-packages
-graphify install
-graphify ./YourVaultFolder --obsidian
-```
-Commit the generated notes into the vault repo like anything else — next
-sync, they show up everywhere, including to Claude.
+## 5. Graphify — automatic, free, no hosting needed
+Graphify builds a knowledge graph from your notes. Semantic extraction needs
+an LLM, and the free option that doesn't need any hosting is Google's
+**Gemini API free tier** (no credit card, doesn't expire).
+
+**Get a free Gemini key:**
+1. Go to aistudio.google.com, sign in with a Google account.
+2. Get API key → Create API key. Copy it.
+
+**Add the GitHub Actions workflow:**
+1. In your **vault repo**, create `.github/workflows/graphify.yml` with the
+   contents from this project's `vault-workflow/.github/workflows/graphify.yml`.
+2. Repo → Settings → Secrets and variables → Actions → New repository secret:
+   - Name: `GEMINI_API_KEY`
+   - Value: the key from AI Studio
+3. Repo → Settings → Actions → General → Workflow permissions → set to
+   **Read and write permissions** (so the workflow can commit the graph back).
+4. It runs automatically once a day, and also whenever you push a change to
+   the vault. You can also trigger it manually from the repo's **Actions** tab.
+
+This produces `graphify-out/graph.json` and `graphify-out/GRAPH_REPORT.md` in
+your vault repo — no server, no Space, nothing to keep running.
+
+**The MCP server already has tools for it** (`graph_overview`,
+`graph_find_node`, `graph_neighbors`) — they read the graph straight from
+GitHub the same way `read_note` does. Nothing extra to deploy; just redeploy
+the updated `server.js` to Render and they'll show up next time Claude
+connects.
 
 ## Local test (optional, before deploying)
 ```
