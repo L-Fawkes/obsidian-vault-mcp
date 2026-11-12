@@ -39,3 +39,6 @@ For each process or attachment change, record: problem, before/after flow, input
 
 
 | TOK-013 | Corrigir cabeçalho de status e remover tile size provisório contraditório | O cabeçalho negava exportação TMX já implementada e o princípio sugeria 48×48 px apesar da regra vigente de não inferir escala | Status separa implementação determinística de validação artística/externa; tamanho de tile passa a depender da Bíblia Visual ou confirmação explícita | 0 tokens diretos medidos; leitura da correção é pequena (estimativa +80–160 tokens por leitura integral do documento; tokenizer não medido). Evita contexto contraditório e decisões dimensionais arbitrárias; economia real não medida | Baixa |
+
+
+| TOK-014 | Corrigir quebras de linha escapadas no checklist mobile | A seção de estado atualizado exibia os caracteres literais \\n em vez de quebras de linha, prejudicando leitura e consumo pelo Claude | Corrigido apenas o formato Markdown; conteúdo operacional preservado | 0 tokens diretos medidos; estimativa de economia não calculada. Leitura do trecho corrigido pode reduzir ambiguidade, sem ganho mensurável | Baixa |
