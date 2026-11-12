@@ -61,6 +61,6 @@ test("Git commit helper retries only recognized non-fast-forward conflicts witho
   assert.match(source, /attempt<=3/);
   assert.match(source, /updateRes\.status===422/);
   assert.match(source, /force:false/);
-  assert.match(source, /fast\.?forward\|reference update failed/);
+  assert.match(source, /fast\.?forward|reference update failed/);
   assert.match(source, /reconstruindo commit sobre HEAD atualizado/);
 });
