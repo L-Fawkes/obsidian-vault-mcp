@@ -120,10 +120,14 @@ export function registerAssetTools(server, cfg) {
         if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error("Base64 inválido.");
         const input=Buffer.from(encoded,"base64");
         if (!input.length || input.length>MAX_BYTES) throw new Error("Imagem vazia ou acima de 12 MB.");
-        const source=sharp(input,{limitInputPixels:MAX_PIXELS}).rotate();
-        const meta=await source.metadata();
-        if (!meta.width || !meta.height || meta.width*meta.height>MAX_PIXELS) throw new Error("Imagem acima de 24 megapixels ou dimensões inválidas.");
-        if (!["png","jpeg","webp","gif"].includes(meta.format)) throw new Error("Formato real não permitido: use PNG, JPEG, WEBP ou GIF.");
+        const inspected=await sharp(input,{limitInputPixels:MAX_PIXELS}).metadata();
+        if (!inspected.width || !inspected.height || inspected.width*inspected.height>MAX_PIXELS) throw new Error("Imagem acima de 24 megapixels ou dimensões inválidas.");
+        if (!["png","jpeg","webp","gif"].includes(inspected.format)) throw new Error("Formato real não permitido: use PNG, JPEG, WEBP ou GIF.");
+        // Normalize EXIF orientation before validating crop coordinates and dimensions.
+        const normalized=await sharp(input,{limitInputPixels:MAX_PIXELS}).rotate().toBuffer({resolveWithObject:true});
+        const meta={...inspected,width:normalized.info.width,height:normalized.info.height};
+        if (!meta.width || !meta.height || meta.width*meta.height>MAX_PIXELS) throw new Error("Imagem orientada acima de 24 megapixels ou dimensões inválidas.");
+        const source=sharp(normalized.data,{limitInputPixels:MAX_PIXELS});
         let pipeline=source;
         if(args.crop){const c=args.crop;if(c.left+c.width>meta.width||c.top+c.height>meta.height)throw new Error("Recorte fora dos limites.");pipeline=pipeline.extract(c);}
         if(args.target_width||args.target_height){
@@ -157,6 +161,14 @@ export function registerAssetTools(server, cfg) {
         const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
         const raw=await sharp(a.output).ensureAlpha().raw().toBuffer({resolveWithObject:true});
         const {data,info}=raw,channels=info.channels;
+        // Bound CPU work even when a caller submits huge rectangles or many operations.
+        let work=0;
+        for(const op of operations){
+          if(op.type==="pixel") work+=1;
+          else if(op.type==="rect") work+=op.filled===false ? 2*op.width+2*op.height : op.width*op.height;
+          else work+=Math.abs(op.x2-op.x1)+Math.abs(op.y2-op.y1)+1;
+          if(work>2000000) throw new Error("Limite de edição excedido: máximo de 2 milhões de pixels por chamada.");
+        }
         const paint=(x,y,color)=>{
           if(x<0||y<0||x>=info.width||y>=info.height)throw new Error("Operação fora dos limites da imagem.");
           const col=rgb(color),i=(y*info.width+x)*channels;
