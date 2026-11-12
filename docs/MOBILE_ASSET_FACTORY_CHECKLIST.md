@@ -107,3 +107,25 @@ A publicação final usa Git Data API: cria blobs, uma árvore, um commit conten
 - [ ] Testar as três ferramentas em requisições MCP stateless reais no Render.
 - [ ] Verificar imagem referenciada, TSX e TMX abrindo no Tiled.
 - [ ] Validar que o conector Claude atualizado lista as novas ferramentas.
+
+
+## Módulo 01 — fonte operacional vigente
+
+Consultar `docs/VISUAL_FACTORY_MODULE_01.md` como roteiro principal. Ele substitui qualquer instrução antiga que contradiga o estado atual e define os cinco outputs obrigatórios: cenário, personagem, criatura, objeto e tileset.
+
+### Estado reconciliado após auditoria
+
+- [x] CI de `Asset pipeline checks` passou no SHA `b2b1dddaf0fabf9d9aa23abda00604b0f7824f10` (push e pull_request).
+- [x] `cleanup_stale_asset_staging` implementado com dry-run por padrão; nenhuma limpeza real executada.
+- [x] Recorte confirmado, atlas determinístico e exportação TSX/TMX expostos como ferramentas MCP e cobertos por testes de contrato/comportamento.
+- [x] Retry limitado para conflito reconhecido de atualização concorrente da branch, sem force-push.
+- [x] Especificação operacional do Módulo 01 criada.
+- [ ] Confirmar Render na versão da branch; não presumir deploy pelo fato de existir commit.
+- [ ] Confirmar Claude/MCP conectado e ferramentas listadas.
+- [ ] Teste real no Android Chrome e fluxo de rascunho/prévia.
+- [ ] Receber cinco referências escolhidas pelo usuário e executar análise/produção.
+- [ ] Validar coerência artística entre os cinco outputs.
+- [ ] Abrir TSX/TMX no Tiled e fazer round-trip.
+- [ ] Registrar evidências, hashes e resultados dos gates do módulo.
+
+Observação: checks estáticos/CI não comprovam reconstrução artística, deploy, funcionamento real no Android ou compatibilidade prática do Tiled. Não marcar módulo como concluído antes dos gates descritos no documento operacional.
