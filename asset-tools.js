@@ -252,7 +252,7 @@ export function registerAssetTools(server, cfg) {
         const raw=await get(stagePath(asset_id,"elements/manifest.json"));if(!raw)throw new Error("Elementos não recortados; execute slice_asset_elements.");
         const manifest=JSON.parse(raw.toString("utf8"));
         if(manifest.asset_id!==asset_id||manifest.source_sha256!==a.outputSha256)throw new Error("Manifesto de recortes não corresponde à versão atual do asset.");
-        const elements=await Promise.all(manifest.elements.map(async e=>{const png=await get(e.path.replace(/^\.staging\/[0-9a-f-]+\//,".staging/"+asset_id+"/"));if(!png||sha256(png)!==e.sha256)throw new Error("Elemento ausente ou SHA-256 divergente: "+e.id);return {...e,png};}));
+        const elements=await Promise.all(manifest.elements.map(async e=>{const png=await get(stagePath(asset_id,"elements/"+e.id+".png"));if(!png||sha256(png)!==e.sha256)throw new Error("Elemento ausente ou SHA-256 divergente: "+e.id);return {...e,png};}));
         const packed=await packAtlas(elements,{padding:padding??1,margin:margin??1,maxWidth:max_width??2048});
         const atlasManifest={...packed.manifest,asset_id,source_sha256:a.outputSha256,created_at:new Date().toISOString(),atlas_path:stagePath(asset_id,"atlas.png")};
         const commit=await commitFiles([{path:stagePath(asset_id,"atlas.png"),bytes:packed.png},{path:stagePath(asset_id,"atlas-manifest.json"),bytes:Buffer.from(JSON.stringify(atlasManifest,null,2))}],"Build deterministic RPG atlas "+asset_id);
