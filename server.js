@@ -561,11 +561,11 @@ function buildServer() {
         if (!ASSETS_ENABLED) throw new Error("RPG asset connection is not configured on the server.");
         const tree = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/trees/${ASSETS_GITHUB_BRANCH}?recursive=1`);
         const files = (tree.tree || [])
-          .filter((item) => item.type === "blob" && item.path.startsWith("references/inbox/") && /\\.(png|jpe?g|webp|gif)$/i.test(item.path))
+          .filter((item) => item.type === "blob" && item.path.startsWith("references/inbox/") && /\.(png|jpe?g|webp|gif)$/i.test(item.path))
           .sort((a, b) => b.path.localeCompare(a.path))
           .slice(0, limit || 15)
           .map((item) => item.path);
-        return { content: [{ type: "text", text: files.length ? files.join("\\n") : "Nenhuma imagem encontrada em references/inbox/." }] };
+        return { content: [{ type: "text", text: files.length ? files.join("\n") : "Nenhuma imagem encontrada em references/inbox/." }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Erro ao listar referências: ${err.message}` }], isError: true };
       }
@@ -584,7 +584,7 @@ function buildServer() {
         if (!path.startsWith("references/inbox/") || path.includes("..") || path.startsWith("/")) {
           throw new Error("Invalid reference image path.");
         }
-        if (!/\\.(png|jpe?g|webp|gif)$/i.test(path)) throw new Error("Unsupported image format.");
+        if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) throw new Error("Unsupported image format.");
         const data = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
         const mime = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[path.split(".").pop().toLowerCase()];
         let encoded = data.content;
