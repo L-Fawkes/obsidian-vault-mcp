@@ -18,11 +18,11 @@ Princípio: preservar originais; nenhuma publicação final sem aprovação expl
 - [x] Declarar ASSETS_UPLOAD_SECRET em render.yaml (ainda requer valor no painel Render).
 - [ ] Confirmar que o conector Claude aponta para o serviço atualizado e lista as ferramentas.
 
-## Estado atualizado — 2026-11-12\n\n- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.\n- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.\n- [ ] O protótipo ainda não possui API de comandos externos para o Claude; a interface manual é apenas a primeira fatia.\n- [ ] O protótipo ainda não salva/carrega projetos em nuvem nem envia PNG aprovado ao repositório.\n\n## Bloqueador técnico encontrado
+## Estado atualizado — 2026-11-12\n\n- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.\n- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.\n- [ ] O protótipo ainda não possui API de comandos externos para o Claude; a interface manual é apenas a primeira fatia.\n- [x] O editor envia rascunho PNG para repositório privado por endpoint autenticado; ainda não há sincronização bidirecional/live.\n\n## Estado da persistência e publicação
 
-O transporte MCP é stateless: buildServer() cria uma instância nova por requisição HTTP. O Map em memória foi removido do fluxo de assets. prepare_asset agora grava original, PNG preparado e metadata em .staging/<UUID>/ no repositório privado RPG-assets. validate_asset, preview_asset e save_asset recuperam os arquivos em chamadas independentes e verificam SHA-256. A leitura usa Git Blobs quando a Contents API não fornece conteúdo inline para arquivos maiores.
+O transporte MCP é stateless: cada requisição cria uma nova instância do servidor. Por isso, o fluxo não depende de Map em memória. `prepare_asset` grava original, PNG preparado e metadata em `.staging/<UUID>/` no repositório privado. `validate_asset`, `preview_asset` e `save_asset` recuperam os arquivos em chamadas independentes e verificam SHA-256. A leitura usa Git Blobs quando a Contents API não fornece conteúdo inline para arquivos maiores.
 
-A persistência está implementada no código da branch, mas ainda precisa de teste real com chamadas MCP separadas e credenciais Render. O staging é removido após publicação (limpeza best-effort); se a publicação falhar parcialmente, os arquivos temporários permanecem para recuperação.
+A publicação final usa Git Data API: cria blobs, uma árvore, um commit contendo original + PNG + relatório e exclusão dos três arquivos de staging; por fim avança a branch com `force:false`. Falha ao avançar a branch não é reportada como publicação concluída. A limpeza após publicação não é best-effort separada: faz parte do mesmo commit. Ainda faltam testes comportamentais reais com PNG e validação no Render.
 
 ## Segurança e integridade a validar
 
@@ -30,7 +30,8 @@ A persistência está implementada no código da branch, mas ainda precisa de te
 - [ ] Adicionar limite de taxa e expiração automática/limpeza periódica do staging.
 - [x] Registrar SHA-256 do original e do preparado; verificar integridade ao recuperar staging.
 - [ ] Validar caminhos e nomes; nunca aceitar path fornecido livremente pelo usuário.
-- [ ] Tornar gravação final idempotente e transacional; hoje os três arquivos finais são commits separados e uma falha pode deixar publicação parcial.
+- [x] Publicação final transacional em um commit: original, PNG, relatório e remoção do staging; atualização de branch sem force.
+- [ ] Adicionar chave idempotente explícita para impedir duplicação após repetição de requisição.
 - [ ] Não salvar em production antes da aprovação vinculada ao asset_id e à versão exata.
 - [ ] Não colocar tokens ou senhas no frontend, no repositório ou em mensagens do Claude.
 
@@ -72,7 +73,9 @@ A persistência está implementada no código da branch, mas ainda precisa de te
 - [x] Staging privado no GitHub com UUID, original, PNG e metadados.
 - [x] Verificação SHA-256 ao reler os artefatos.
 - [x] Fallback para Git Blobs ao recuperar arquivos acima do limite de conteúdo inline da Contents API.
-- [ ] Executar teste de sintaxe e fluxo de ponta a ponta antes de integrar à branch principal.
+- [x] `npm run check` e `npm test` passaram na CI para dd981bb.
+- [ ] Executar teste comportamental com PNG real e fluxo MCP stateless.
+- [ ] Validar deploy Render e Android Chrome antes de integrar à branch principal.
 
 
 ## Controle programático de edição pelo Claude
@@ -90,5 +93,5 @@ A persistência está implementada no código da branch, mas ainda precisa de te
 ## CI e integração
 
 - [x] Workflow GitHub Actions criado em `.github/workflows/validate.yml` para instalar dependências e executar `npm run check`.
-- [ ] Confirmar execução bem-sucedida do workflow no GitHub; a consulta de execuções disponível nesta sessão ainda não retornou uma execução associada aos commits.
+- [x] GitHub Actions `Asset pipeline checks` passou no push e no pull_request para o commit dd981bb (2026-11-12).
 - [ ] Revisar e testar o deploy no Render antes de qualquer publicação na branch principal.
