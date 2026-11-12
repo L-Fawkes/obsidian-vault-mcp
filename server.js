@@ -20,6 +20,7 @@ const ASSETS_GITHUB_OWNER = process.env.ASSETS_GITHUB_OWNER;
 const ASSETS_GITHUB_REPO = process.env.ASSETS_GITHUB_REPO;
 const ASSETS_GITHUB_BRANCH = process.env.ASSETS_GITHUB_BRANCH || "main";
 const ASSETS_UPLOAD_SECRET = process.env.ASSETS_UPLOAD_SECRET;
+const EDITOR_ACCESS_SECRET = process.env.EDITOR_ACCESS_SECRET;
 const ASSETS_ENABLED = Boolean(
   ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO
 );
@@ -606,6 +607,30 @@ function buildServer() {
     }
   );
 
+  if (ASSETS_ENABLED) {
+    server.tool(
+      "read_editor_draft",
+      "Read the latest PNG draft exported from the mobile RPG pixel editor. This is a working draft only, not an approved game asset.",
+      {},
+      async () => {
+        try {
+          const path = "editor-drafts/latest.png";
+          const data = await assetFetch(`${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
+          let encoded = data.content;
+          if ((!encoded || data.encoding !== "base64") && data.sha) {
+            const blob = await assetFetch(`${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/blobs/${data.sha}`);
+            encoded = blob.content;
+          }
+          const bytes = Buffer.from(encoded || "", "base64");
+          if (!bytes.length || bytes.length > 12 * 1024 * 1024) throw new Error("Rascunho vazio ou acima de 12 MB.");
+          return { content: [{ type: "text", text: "Rascunho atual do editor: editor-drafts/latest.png. Ainda não aprovado para uso no jogo." }, { type: "image", data: bytes.toString("base64"), mimeType: "image/png" }] };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Não foi possível ler o rascunho do editor: ${err.message}` }], isError: true };
+        }
+      }
+    );
+  }
+
   if (ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO) {
     registerAssetTools(server, { z, token: ASSETS_GITHUB_TOKEN, owner: ASSETS_GITHUB_OWNER, repo: ASSETS_GITHUB_REPO, branch: ASSETS_GITHUB_BRANCH });
   }
@@ -618,6 +643,39 @@ const app = express();
 app.use(express.json({ limit: "18mb" }));
 
 app.use("/editor", express.static("public", { index: "editor.html", fallthrough: false }));
+
+// The editor uses a dedicated credential; never expose GitHub or MCP credentials in the browser.
+app.post("/editor/api/draft", async (req, res) => {
+  if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Sincronização do editor não configurada." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Acesso não autorizado." });
+  }
+  try {
+    const payload = req.body || {};
+    const encoded = String(payload.image_base64 || "").replace(/^data:image\\/png;base64,/i, "");
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return res.status(400).json({ error: "PNG em base64 inválido." });
+    const bytes = Buffer.from(encoded, "base64");
+    if (!bytes.length || bytes.length > 12 * 1024 * 1024) return res.status(413).json({ error: "PNG vazio ou acima de 12 MB." });
+    const metadata = await (await import("sharp")).default(bytes, { limitInputPixels: 24000000 }).metadata();
+    if (metadata.format !== "png" || !metadata.width || !metadata.height || metadata.width * metadata.height > 24000000) {
+      return res.status(400).json({ error: "O arquivo precisa ser um PNG válido de até 24 megapixels." });
+    }
+    const path = "editor-drafts/latest.png";
+    const url = `${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
+    const current = await fetch(`${url}?ref=${encodeURIComponent(ASSETS_GITHUB_BRANCH)}`, { headers: assetHeaders });
+    let sha;
+    if (current.ok) sha = (await current.json()).sha;
+    else if (current.status !== 404) throw new Error(`GitHub ${current.status} ao consultar rascunho.`);
+    const body = { message: "Update mobile RPG editor draft", content: bytes.toString("base64"), branch: ASSETS_GITHUB_BRANCH };
+    if (sha) body.sha = sha;
+    const saved = await fetch(url, { method: "PUT", headers: { ...assetHeaders, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!saved.ok) throw new Error(`GitHub ${saved.status}: ${(await saved.text()).slice(0, 180)}`);
+    return res.json({ ok: true, path, width: metadata.width, height: metadata.height, status: "draft_not_approved" });
+  } catch (err) {
+    console.error("Editor draft sync failed:", err.message);
+    return res.status(502).json({ error: "Não foi possível sincronizar o rascunho." });
+  }
+});
 
 app.get("/", (_req, res) => res.send("Obsidian vault MCP server is running."));
 
