@@ -149,3 +149,8 @@ The MCP server now exposes:
 - `export_tiled_files`: validates and writes TSX, plus an optional TMX only when explicit map dimensions and placements are supplied. Outputs remain in staging and are not production-published.
 
 The TSX tool accepts a caller-supplied image source and dimensions; the caller must ensure the image actually exists at that path in the eventual project. A packed irregular sprite atlas is not automatically suitable as a regular grid TSX tileset. No TMX placements are inferred. The user must review the generated files in Tiled before any production save.
+
+
+## Staging lifecycle cleanup
+
+The MCP tool `cleanup_stale_asset_staging` lists stale candidates by default without deleting anything. Its default TTL is 30 days (configurable from 7 to 365 days). Deletion requires an explicit `dry_run: false` call. Only staging directories with valid UUID metadata, a matching metadata path and a parseable `createdAt` older than the TTL are eligible. If GitHub reports a truncated recursive tree, cleanup aborts rather than guessing. It deletes only files below the matching `.staging/<asset-id>/` directory and commits the deletions together. Production asset folders are outside its scope.
