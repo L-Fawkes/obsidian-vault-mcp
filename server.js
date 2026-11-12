@@ -586,7 +586,13 @@ function buildServer() {
         if (!/\\.(png|jpe?g|webp|gif)$/i.test(path)) throw new Error("Unsupported image format.");
         const data = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
         const mime = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[path.split(".").pop().toLowerCase()];
-        const bytes = Buffer.from(data.content || "", data.encoding || "base64");
+        let encoded = data.content;
+        if ((!encoded || data.encoding !== "base64") && data.sha) {
+          const blob = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/blobs/${data.sha}`);
+          encoded = blob.content;
+          if (blob.encoding !== "base64") throw new Error("GitHub não retornou imagem em base64.");
+        }
+        const bytes = Buffer.from(encoded || "", "base64");
         if (!bytes.length || bytes.length > 12 * 1024 * 1024) throw new Error("Image is empty or exceeds the 12 MB visual retrieval limit.");
         return {
           content: [
