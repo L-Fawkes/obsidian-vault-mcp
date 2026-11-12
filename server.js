@@ -727,6 +727,38 @@ const upload = multer({
   },
 });
 
+app.post("/editor/api/reference", (req, res) => {
+  if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Envio de referências não configurado." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Acesso não autorizado." });
+  }
+  upload.single("image")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Selecione uma imagem." });
+    try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(req.file.buffer, { limitInputPixels: 24000000 }).metadata();
+      if (!["png", "jpeg", "webp", "gif"].includes(meta.format) || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
+        return res.status(400).json({ error: "Imagem inválida ou acima de 24 megapixels." });
+      }
+      const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
+      const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${original}`;
+      const path = `references/inbox/${filename}`;
+      const url = `https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
+      const saved = await fetch(url, {
+        method: "PUT",
+        headers: { ...assetHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: `Add RPG reference image: ${filename}`, content: req.file.buffer.toString("base64"), branch: ASSETS_GITHUB_BRANCH })
+      });
+      if (!saved.ok) throw new Error(`GitHub ${saved.status}: ${(await saved.text()).slice(0, 180)}`);
+      return res.json({ ok: true, path, filename, width: meta.width, height: meta.height, format: meta.format, bytes: req.file.size, status: "private_reference_uploaded" });
+    } catch (error) {
+      console.error("Editor reference upload failed:", error.message);
+      return res.status(502).json({ error: "Não foi possível guardar a referência no repositório privado." });
+    }
+  });
+});
+
 function safeSecretEqual(provided, expected) {
   if (typeof provided !== "string" || typeof expected !== "string") return false;
   const a = Buffer.from(provided);
