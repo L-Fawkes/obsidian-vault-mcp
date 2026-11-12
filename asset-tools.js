@@ -142,6 +142,44 @@ export function registerAssetTools(server, cfg) {
       }catch(e){return result("prepare_asset: "+e.message,true);}
     });
 
+  server.tool("edit_asset_pixels",
+    "Aplica edições determinísticas em pixels sobre a cópia preparada no staging. O original permanece intacto. As alterações não são publicadas; valide e mostre a prévia antes de pedir aprovação para salvar.",
+    {
+      asset_id:z.string().uuid(),
+      operations:z.array(z.discriminatedUnion("type",[
+        z.object({type:z.literal("pixel"),x:z.number().int().nonnegative(),y:z.number().int().nonnegative(),color:z.string().regex(/^#?[0-9a-fA-F]{6}$/)}),
+        z.object({type:z.literal("rect"),x:z.number().int().nonnegative(),y:z.number().int().nonnegative(),width:z.number().int().positive(),height:z.number().int().positive(),color:z.string().regex(/^#?[0-9a-fA-F]{6}$/),filled:z.boolean().optional()}),
+        z.object({type:z.literal("line"),x1:z.number().int().nonnegative(),y1:z.number().int().nonnegative(),x2:z.number().int().nonnegative(),y2:z.number().int().nonnegative(),color:z.string().regex(/^#?[0-9a-fA-F]{6}$/)})
+      ])).min(1).max(20000)
+    },
+    async ({asset_id,operations})=>{
+      try{
+        const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
+        const raw=await sharp(a.output).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+        const {data,info}=raw,channels=info.channels;
+        const paint=(x,y,color)=>{
+          if(x<0||y<0||x>=info.width||y>=info.height)throw new Error("Operação fora dos limites da imagem.");
+          const col=rgb(color),i=(y*info.width+x)*channels;
+          data[i]=col[0];data[i+1]=col[1];data[i+2]=col[2];data[i+3]=255;
+        };
+        for(const op of operations){
+          if(op.type==="pixel"){paint(op.x,op.y,op.color);continue;}
+          if(op.type==="rect"){
+            if(op.x+op.width>info.width||op.y+op.height>info.height)throw new Error("Retângulo fora dos limites.");
+            if(op.filled!==false){for(let y=op.y;y<op.y+op.height;y++)for(let x=op.x;x<op.x+op.width;x++)paint(x,y,op.color);}
+            else{for(let x=op.x;x<op.x+op.width;x++){paint(x,op.y,op.color);paint(x,op.y+op.height-1,op.color);}for(let y=op.y;y<op.y+op.height;y++){paint(op.x,y,op.color);paint(op.x+op.width-1,y,op.color);}}
+            continue;
+          }
+          let x=op.x1,y=op.y1,dx=Math.abs(op.x2-op.x1),sx=op.x1<op.x2?1:-1,dy=-Math.abs(op.y2-op.y1),sy=op.y1<op.y2?1:-1,err=dx+dy;
+          while(true){paint(x,y,op.color);if(x===op.x2&&y===op.y2)break;const e2=2*err;if(e2>=dy){err+=dy;x+=sx;}if(e2<=dx){err+=dx;y+=sy;}}
+        }
+        const output=await sharp(data,{raw:info}).png().toBuffer();
+        const updated={...a,output,outputSha256:sha256(output)};
+        await saveStage(updated);
+        return result(JSON.stringify({asset_id,status:"edited_staging_only",operations:operations.length,width:a.width,height:a.height,output_sha256:updated.outputSha256,next:["validate_asset","preview_asset","aguardar aprovação explícita","save_asset"]},null,2));
+      }catch(e){return result("edit_asset_pixels: "+e.message,true);}
+    });
+
   server.tool("validate_asset","Confere dimensões, PNG, alpha, transparência e alinhamento. Não salva o arquivo final.",
     {asset_id:z.string().uuid(),expected_width:z.number().int().positive().optional(),expected_height:z.number().int().positive().optional(),grid_size:z.number().int().min(1).max(256).optional()},
     async ({asset_id,expected_width,expected_height,grid_size})=>{
