@@ -95,6 +95,12 @@ Not yet implemented:
 - TSX/TMX generation and round-trip validation;
 - automated tests and CI coverage for image edge cases.
 
+## Mobile editor draft synchronization
+
+The mobile editor now has a dedicated authenticated endpoint: `POST /editor/api/draft`. Configure a separate high-entropy `EDITOR_ACCESS_SECRET` environment variable on Render; do not reuse `GITHUB_TOKEN`, `MCP_SHARED_SECRET`, or `ASSETS_GITHUB_TOKEN`. Enter this secret only in the editor's password field when syncing. It is held in the page memory and is not written to browser storage. The endpoint accepts a PNG data URL, enforces a 12 MB and 24 MP limit, and updates `editor-drafts/latest.png` in the private assets repository. It returns a draft status only; it does not approve or publish a production asset. Claude can inspect the current draft with the `read_editor_draft` MCP tool. Rotate the dedicated secret if it is exposed.
+
+This first sync is one-way from browser to shared draft. It does not yet stream live edits from Claude back into the open canvas, and it has not yet been tested on the deployed Render service or Android Chrome.
+
 ## Free toolchain
 
 Required server-side runtime:
