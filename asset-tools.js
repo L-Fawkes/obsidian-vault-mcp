@@ -69,32 +69,39 @@ export function registerAssetTools(server, cfg) {
     if (!deleted.ok) throw new Error("GitHub " + deleted.status + " ao remover " + path);
   }
   async function commitFiles(files, message) {
-    // Publish multiple additions, updates and deletions in one Git commit.
+    // Rebuild from the latest branch head after a concurrent non-fast-forward update.
     const git = `https://api.github.com/repos/${owner}/${repo}/git`;
-    const refRes = await fetch(`${git}/ref/heads/${encodeURIComponent(branch)}`, { headers });
-    if (!refRes.ok) throw new Error("GitHub " + refRes.status + " ao consultar branch: " + (await refRes.text()).slice(0,200));
-    const refData = await refRes.json();
-    const parentSha = refData.object?.sha;
-    if (!parentSha) throw new Error("GitHub não retornou commit atual da branch.");
-    const parentRes = await fetch(`${git}/commits/${parentSha}`, { headers });
-    if (!parentRes.ok) throw new Error("GitHub " + parentRes.status + " ao consultar árvore base.");
-    const parent = await parentRes.json();
-    const entries = await Promise.all(files.map(async file => {
-      if (file.delete) return { path:file.path, mode:"100644", type:"blob", sha:null };
-      const blobRes = await fetch(`${git}/blobs`, { method:"POST", headers, body:JSON.stringify({content:Buffer.from(file.bytes).toString("base64"),encoding:"base64"}) });
-      if (!blobRes.ok) throw new Error("GitHub " + blobRes.status + " ao criar blob: " + (await blobRes.text()).slice(0,200));
-      const blob = await blobRes.json();
-      return { path:file.path, mode:"100644", type:"blob", sha:blob.sha };
-    }));
-    const treeRes = await fetch(`${git}/trees`, { method:"POST", headers, body:JSON.stringify({base_tree:parent.tree.sha,tree:entries}) });
-    if (!treeRes.ok) throw new Error("GitHub " + treeRes.status + " ao criar árvore: " + (await treeRes.text()).slice(0,200));
-    const tree = await treeRes.json();
-    const commitRes = await fetch(`${git}/commits`, { method:"POST", headers, body:JSON.stringify({message,tree:tree.sha,parents:[parentSha]}) });
-    if (!commitRes.ok) throw new Error("GitHub " + commitRes.status + " ao criar commit: " + (await commitRes.text()).slice(0,200));
-    const commit = await commitRes.json();
-    const updateRes = await fetch(`${git}/refs/heads/${encodeURIComponent(branch)}`, { method:"PATCH", headers, body:JSON.stringify({sha:commit.sha,force:false}) });
-    if (!updateRes.ok) throw new Error("GitHub " + updateRes.status + " ao atualizar branch sem force: " + (await updateRes.text()).slice(0,200));
-    return {commit_sha:commit.sha,files:files.length};
+    const refUrl = `${git}/ref/heads/${encodeURIComponent(branch)}`;
+    for (let attempt=1; attempt<=3; attempt++) {
+      const refRes = await fetch(refUrl, { headers });
+      if (!refRes.ok) throw new Error("GitHub " + refRes.status + " ao consultar branch: " + (await refRes.text()).slice(0,200));
+      const refData = await refRes.json();
+      const parentSha = refData.object?.sha;
+      if (!parentSha) throw new Error("GitHub não retornou commit atual da branch.");
+      const parentRes = await fetch(`${git}/commits/${parentSha}`, { headers });
+      if (!parentRes.ok) throw new Error("GitHub " + parentRes.status + " ao consultar árvore base.");
+      const parent = await parentRes.json();
+      const entries = await Promise.all(files.map(async file => {
+        if (file.delete) return { path:file.path, mode:"100644", type:"blob", sha:null };
+        const blobRes = await fetch(`${git}/blobs`, { method:"POST", headers, body:JSON.stringify({content:Buffer.from(file.bytes).toString("base64"),encoding:"base64"}) });
+        if (!blobRes.ok) throw new Error("GitHub " + blobRes.status + " ao criar blob: " + (await blobRes.text()).slice(0,200));
+        const blob = await blobRes.json();
+        return { path:file.path, mode:"100644", type:"blob", sha:blob.sha };
+      }));
+      const treeRes = await fetch(`${git}/trees`, { method:"POST", headers, body:JSON.stringify({base_tree:parent.tree.sha,tree:entries}) });
+      if (!treeRes.ok) throw new Error("GitHub " + treeRes.status + " ao criar árvore: " + (await treeRes.text()).slice(0,200));
+      const tree = await treeRes.json();
+      const commitRes = await fetch(`${git}/commits`, { method:"POST", headers, body:JSON.stringify({message,tree:tree.sha,parents:[parentSha]}) });
+      if (!commitRes.ok) throw new Error("GitHub " + commitRes.status + " ao criar commit: " + (await commitRes.text()).slice(0,200));
+      const commit = await commitRes.json();
+      const updateRes = await fetch(`${git}/refs/heads/${encodeURIComponent(branch)}`, { method:"PATCH", headers, body:JSON.stringify({sha:commit.sha,force:false}) });
+      if (updateRes.ok) return {commit_sha:commit.sha,files:files.length,attempts:attempt};
+      const updateError = await updateRes.text();
+      const concurrent = updateRes.status===422 && /fast.?forward|reference update failed|is at/i.test(updateError);
+      if (!concurrent || attempt===3) throw new Error("GitHub " + updateRes.status + " ao atualizar branch sem force: " + updateError.slice(0,200));
+      console.warn("Concorrência ao gravar staging; reconstruindo commit sobre HEAD atualizado (tentativa "+(attempt+1)+").");
+    }
+    throw new Error("Não foi possível concluir commit após conflitos concorrentes.");
   }
   function stagePath(id, name) { return `${STAGING_PREFIX}/${id}/${name}`; }
   async function saveStage(a, { includeOriginal = true } = {}) {
