@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { sliceConfirmedBoxes, packAtlas, createTsx, createTmx } from "./asset-export.js";
 import { randomUUID, createHash } from "node:crypto";
 
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -227,6 +228,52 @@ export function registerAssetTools(server, cfg) {
         ];
         return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number((100*transparent/(a.width*a.height)).toFixed(2))}},null,2));
       }catch(e){return result("validate_asset: "+e.message,true);}
+    });
+
+  server.tool("slice_asset_elements","Recorta elementos usando exclusivamente caixas delimitadoras confirmadas. Persiste PNGs e manifesto no staging privado; não publica assets.",
+    {asset_id:z.string().uuid(),boxes:z.array(z.object({id:z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),name:z.string().max(100).optional(),x:z.number().int().nonnegative(),y:z.number().int().nonnegative(),width:z.number().int().positive(),height:z.number().int().positive()})).min(1).max(512)},
+    async ({asset_id,boxes})=>{
+      try{
+        const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
+        const elements=await sliceConfirmedBoxes(a.output,boxes);
+        const manifest={version:1,asset_id,source_sha256:a.outputSha256,created_at:new Date().toISOString(),elements:elements.map(({id,name,x,y,width,height,sha256})=>({id,name,x,y,width,height,sha256,path:stagePath(asset_id,"elements/"+id+".png")}))};
+        const files=elements.map(e=>({path:stagePath(asset_id,"elements/"+e.id+".png"),bytes:e.png}));
+        files.push({path:stagePath(asset_id,"elements/manifest.json"),bytes:Buffer.from(JSON.stringify(manifest,null,2))});
+        const commit=await commitFiles(files,"Slice confirmed RPG asset elements "+asset_id);
+        return result(JSON.stringify({status:"sliced_staging_only",asset_id,count:elements.length,manifest_path:stagePath(asset_id,"elements/manifest.json"),commit_sha:commit.commit_sha,elements:manifest.elements},null,2));
+      }catch(e){return result("slice_asset_elements: "+e.message,true);}
+    });
+
+  server.tool("build_asset_atlas","Monta atlas PNG determinístico a partir dos elementos já recortados e persistidos no staging. Não publica.",
+    {asset_id:z.string().uuid(),padding:z.number().int().min(0).max(64).optional(),margin:z.number().int().min(0).max(128).optional(),max_width:z.number().int().min(1).max(8192).optional()},
+    async ({asset_id,padding,margin,max_width})=>{
+      try{
+        const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
+        const raw=await get(stagePath(asset_id,"elements/manifest.json"));if(!raw)throw new Error("Elementos não recortados; execute slice_asset_elements.");
+        const manifest=JSON.parse(raw.toString("utf8"));
+        if(manifest.asset_id!==asset_id||manifest.source_sha256!==a.outputSha256)throw new Error("Manifesto de recortes não corresponde à versão atual do asset.");
+        const elements=await Promise.all(manifest.elements.map(async e=>{const png=await get(e.path.replace(/^\.staging\/[0-9a-f-]+\//,".staging/"+asset_id+"/"));if(!png||sha256(png)!==e.sha256)throw new Error("Elemento ausente ou SHA-256 divergente: "+e.id);return {...e,png};}));
+        const packed=await packAtlas(elements,{padding:padding??1,margin:margin??1,maxWidth:max_width??2048});
+        const atlasManifest={...packed.manifest,asset_id,source_sha256:a.outputSha256,created_at:new Date().toISOString(),atlas_path:stagePath(asset_id,"atlas.png")};
+        const commit=await commitFiles([{path:stagePath(asset_id,"atlas.png"),bytes:packed.png},{path:stagePath(asset_id,"atlas-manifest.json"),bytes:Buffer.from(JSON.stringify(atlasManifest,null,2))}],"Build deterministic RPG atlas "+asset_id);
+        return result(JSON.stringify({status:"atlas_staged_not_published",asset_id,atlas_path:atlasManifest.atlas_path,manifest_path:stagePath(asset_id,"atlas-manifest.json"),width:atlasManifest.atlas.width,height:atlasManifest.atlas.height,elements:atlasManifest.elements.length,sha256:atlasManifest.atlas.sha256,commit_sha:commit.commit_sha},null,2));
+      }catch(e){return result("build_asset_atlas: "+e.message,true);}
+    });
+
+  server.tool("export_tiled_files","Gera TSX e, opcionalmente, TMX a partir de parâmetros explícitos. Requer uma imagem tileset em grade regular; atlas de sprites irregulares não é automaticamente um tileset.",
+    {asset_id:z.string().uuid(),tileset_name:z.string().min(1).max(80),image_source:z.string().min(1).max(240),image_width:z.number().int().positive(),image_height:z.number().int().positive(),tile_width:z.number().int().positive(),tile_height:z.number().int().positive(),columns:z.number().int().positive(),tile_count:z.number().int().positive(),spacing:z.number().int().min(0).optional(),margin:z.number().int().min(0).optional(),map:z.object({width:z.number().int().positive(),height:z.number().int().positive(),placements:z.array(z.object({x:z.number().int().nonnegative(),y:z.number().int().nonnegative(),gid:z.number().int().positive()})).max(100000)}).optional()},
+    async (args)=>{
+      try{
+        const a=await loadStage(args.asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
+        const tsx=createTsx({name:args.tileset_name,imageSource:args.image_source,imageWidth:args.image_width,imageHeight:args.image_height,tileWidth:args.tile_width,tileHeight:args.tile_height,columns:args.columns,tileCount:args.tile_count,spacing:args.spacing??0,margin:args.margin??0});
+        const stem=cleanName(args.tileset_name),files=[{path:stagePath(args.asset_id,"exports/"+stem+".tsx"),bytes:Buffer.from(tsx)}];
+        if(args.map){
+          const tmx=createTmx({width:args.map.width,height:args.map.height,tileWidth:args.tile_width,tileHeight:args.tile_height,tilesetSource:stem+".tsx",placements:args.map.placements});
+          files.push({path:stagePath(args.asset_id,"exports/"+stem+".tmx"),bytes:Buffer.from(tmx)});
+        }
+        const commit=await commitFiles(files,"Export staged Tiled files "+args.asset_id);
+        return result(JSON.stringify({status:"tiled_exports_staged_not_published",asset_id:args.asset_id,files:files.map(f=>f.path),commit_sha:commit.commit_sha,requires_tiled_application_validation:true},null,2));
+      }catch(e){return result("export_tiled_files: "+e.message,true);}
     });
 
   server.tool("save_asset","Publica original, PNG e relatório em um único commit. A aprovação fica vinculada ao SHA-256 exato da imagem visualizada.",
