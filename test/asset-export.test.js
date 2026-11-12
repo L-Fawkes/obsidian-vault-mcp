@@ -43,3 +43,7 @@ test("creates TMX only from explicit placements and rejects collisions",()=>{
   assert.match(tmx,/<data encoding="csv">\n0,1,0,0/);
   assert.throws(()=>createTmx({width:1,height:1,tileWidth:16,tileHeight:16,tilesetSource:"set.tsx",placements:[{x:0,y:0,gid:1},{x:0,y:0,gid:2}]}),/mesma célula/);
 });
+
+test("rejects TMX grids and placement batches above resource limits",()=>{
+  assert.throws(()=>createTmx({width:5000,height:5000,tileWidth:16,tileHeight:16,tilesetSource:"set.tsx",placements:[]}),/limites/);
+});
