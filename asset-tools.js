@@ -67,17 +67,41 @@ export function registerAssetTools(server, cfg) {
     });
     if (!deleted.ok) throw new Error("GitHub " + deleted.status + " ao remover " + path);
   }
+  async function commitFiles(files, message) {
+    // Publish multiple additions, updates and deletions in one Git commit.
+    const git = `https://api.github.com/repos/${owner}/${repo}/git`;
+    const refRes = await fetch(`${git}/ref/heads/${encodeURIComponent(branch)}`, { headers });
+    if (!refRes.ok) throw new Error("GitHub " + refRes.status + " ao consultar branch: " + (await refRes.text()).slice(0,200));
+    const refData = await refRes.json();
+    const parentSha = refData.object?.sha;
+    if (!parentSha) throw new Error("GitHub não retornou commit atual da branch.");
+    const parentRes = await fetch(`${git}/commits/${parentSha}`, { headers });
+    if (!parentRes.ok) throw new Error("GitHub " + parentRes.status + " ao consultar árvore base.");
+    const parent = await parentRes.json();
+    const entries = await Promise.all(files.map(async file => {
+      if (file.delete) return { path:file.path, mode:"100644", type:"blob", sha:null };
+      const blobRes = await fetch(`${git}/blobs`, { method:"POST", headers, body:JSON.stringify({content:Buffer.from(file.bytes).toString("base64"),encoding:"base64"}) });
+      if (!blobRes.ok) throw new Error("GitHub " + blobRes.status + " ao criar blob: " + (await blobRes.text()).slice(0,200));
+      const blob = await blobRes.json();
+      return { path:file.path, mode:"100644", type:"blob", sha:blob.sha };
+    }));
+    const treeRes = await fetch(`${git}/trees`, { method:"POST", headers, body:JSON.stringify({base_tree:parent.tree.sha,tree:entries}) });
+    if (!treeRes.ok) throw new Error("GitHub " + treeRes.status + " ao criar árvore: " + (await treeRes.text()).slice(0,200));
+    const tree = await treeRes.json();
+    const commitRes = await fetch(`${git}/commits`, { method:"POST", headers, body:JSON.stringify({message,tree:tree.sha,parents:[parentSha]}) });
+    if (!commitRes.ok) throw new Error("GitHub " + commitRes.status + " ao criar commit: " + (await commitRes.text()).slice(0,200));
+    const commit = await commitRes.json();
+    const updateRes = await fetch(`${git}/refs/heads/${encodeURIComponent(branch)}`, { method:"PATCH", headers, body:JSON.stringify({sha:commit.sha,force:false}) });
+    if (!updateRes.ok) throw new Error("GitHub " + updateRes.status + " ao atualizar branch sem force: " + (await updateRes.text()).slice(0,200));
+    return {commit_sha:commit.sha,files:files.length};
+  }
   function stagePath(id, name) { return `${STAGING_PREFIX}/${id}/${name}`; }
   async function saveStage(a, { includeOriginal = true } = {}) {
-    const meta = {
-      id:a.id, name:a.name, width:a.width, height:a.height, format:a.format,
-      sourceWidth:a.sourceWidth, sourceHeight:a.sourceHeight, options:a.options,
-      originalSha256:sha256(a.original), outputSha256:sha256(a.output),
-      createdAt:new Date().toISOString()
-    };
-    if (includeOriginal) await put(stagePath(a.id,"original.bin"),a.original,"Stage original RPG asset "+a.id);
-    await put(stagePath(a.id,"prepared.png"),a.output,"Stage prepared RPG asset "+a.id);
-    await put(stagePath(a.id,"metadata.json"),Buffer.from(JSON.stringify(meta)),"Stage metadata RPG asset "+a.id);
+    const meta = { id:a.id,name:a.name,width:a.width,height:a.height,format:a.format,sourceWidth:a.sourceWidth,sourceHeight:a.sourceHeight,options:a.options,originalSha256:sha256(a.original),outputSha256:sha256(a.output),createdAt:new Date().toISOString() };
+    const files=[];
+    if(includeOriginal)files.push({path:stagePath(a.id,"original.bin"),bytes:a.original});
+    files.push({path:stagePath(a.id,"prepared.png"),bytes:a.output},{path:stagePath(a.id,"metadata.json"),bytes:Buffer.from(JSON.stringify(meta))});
+    await commitFiles(files,"Stage RPG asset "+a.id);
   }
   async function loadStage(id) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("ID de asset inválido.");
@@ -91,12 +115,8 @@ export function registerAssetTools(server, cfg) {
     return {...meta,original,output};
   }
   async function clearStage(id) {
-    for (const name of ["metadata.json","prepared.png","original.bin"]) {
-      try { await remove(stagePath(id,name),"Remove completed RPG asset staging "+id); } catch (e) {
-        // Staging cleanup is best-effort; saved deliverables remain authoritative.
-        console.error("Staging cleanup warning:",e.message);
-      }
-    }
+    try { await commitFiles(["metadata.json","prepared.png","original.bin"].map(name=>({path:stagePath(id,name),delete:true})),"Remove completed RPG asset staging "+id); }
+    catch(e){console.error("Staging cleanup warning:",e.message);}
   }
 
   server.tool("prepare_asset",
@@ -205,34 +225,26 @@ export function registerAssetTools(server, cfg) {
           {name:"alpha_channel",passed:true,detail:"Canal alpha presente"},
           {name:"grid_alignment",passed:!grid_size||(a.width%grid_size===0&&a.height%grid_size===0),detail:grid_size?"Grade "+grid_size+"px":"Não solicitado"}
         ];
-        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number(100*transparent/(a.width*a.height)).toFixed(2)},sha256:{original:a.originalSha256,prepared:a.outputSha256},warning:"Chroma-key por cor é aproximado; validação técnica não substitui revisão artística."},null,2));
-      }catch(e){return result("validate_asset: "+e.message,true);}
-    });
-
-  server.tool("preview_asset","Retorna prévia PNG visual; o arquivo permanece no staging e ainda não foi salvo como asset final.",
-    {asset_id:z.string().uuid()},
-    async ({asset_id})=>{
-      try{const a=await loadStage(asset_id);if(!a)return result("Asset não encontrado no staging; execute prepare_asset novamente.",true);
-        return {content:[{type:"text",text:`PRÉVIA: ${a.name}\\nID: ${a.id}\\nDimensões: ${a.width}x${a.height}px\\nStatus: NÃO SALVO. Aguarde aprovação explícita.`},{type:"image",data:a.output.toString("base64"),mimeType:"image/png"}]};
-      }catch(e){return result("preview_asset: "+e.message,true);}
-    });
-
-  server.tool("send_asset_to_editor",
-    "Envia a versão PNG preparada de um asset do staging para a galeria de prévias do editor mobile. Não salva o asset definitivo nem substitui a referência original. Use depois de validar e antes da aprovação final.",
-    {asset_id:z.string().uuid()},
-    async ({asset_id})=>{
+        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number(1  server.tool("save_asset","Publica original, PNG e relatório em um único commit. A aprovação fica vinculada ao SHA-256 exato da imagem visualizada.",
+    {asset_id:z.string().uuid(),approved_sha256:z.string().regex(/^[a-f0-9]{64}$/),user_approval:z.string().min(80),destination_folder:z.enum(["sprites","tilesets","maps","exports"])},
+    async ({asset_id,approved_sha256,user_approval,destination_folder})=>{
       try{
         const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
-        const previewId=randomUUID();
-        const previewPath="editor-previews/"+previewId+".png";
-        const metadata={preview_id:previewId,asset_id:a.id,name:a.name,width:a.width,height:a.height,format:"png",bytes:a.output.length,sha256:sha256(a.output),created_at:new Date().toISOString(),status:"preview_not_approved",path:previewPath};
-        await put(previewPath,a.output,"Deliver RPG asset preview to mobile editor "+previewId);
-        await put("editor-previews/latest.json",Buffer.from(JSON.stringify(metadata,null,2)),"Update latest RPG editor preview metadata");
-        return {content:[{type:"text",text:JSON.stringify({status:"delivered_to_editor_not_approved",...metadata,instructions:"Abra o editor e toque em Receber prévia do Claude. O arquivo continua no staging e não foi publicado como asset final."},null,2)},{type:"image",data:a.output.toString("base64"),mimeType:"image/png"}]};
-      }catch(e){return {content:[{type:"text",text:"send_asset_to_editor: "+e.message}],isError:true};}
-    });
-
-  server.tool("save_asset","Publica original preservado, PNG preparado e relatório técnico. Exige frase exata: APROVO SALVAR <asset_id>.",
+        if(approved_sha256!==a.outputSha256)throw new Error("Hash aprovado não corresponde à versão atual. Gere nova prévia e valide novamente.");
+        const requiredApproval="APROVO SALVAR "+asset_id+" "+a.outputSha256;
+        if(user_approval.trim()!==requiredApproval)throw new Error("Aprovação ausente ou inválida. Confirme exatamente: "+requiredApproval);
+        const stamp=new Date().toISOString().replace(/[:.]/g,"-"),stem=a.name+"-"+stamp;
+        const originalExt=a.format==="jpeg"?"jpg":a.format;
+        const originalPath="references/originals/"+stem+"."+originalExt,finalPath=destination_folder+"/"+stem+".png",reportPath="reports/"+stem+".json";
+        const report={asset_id,saved_at:new Date().toISOString(),original_path:originalPath,prepared_path:finalPath,original:{format:a.format,width:a.sourceWidth,height:a.sourceHeight,bytes:a.original.length,sha256:a.originalSha256},prepared:{format:"png",width:a.width,height:a.height,bytes:a.output.length,sha256:a.outputSha256},processing:a.options,approval:{type:"explicit_user_confirmation",approved_sha256:a.outputSha256}};
+        const files=[
+          {path:originalPath,bytes:a.original},{path:finalPath,bytes:a.output},{path:reportPath,bytes:Buffer.from(JSON.stringify(report,null,2))},
+          ...["metadata.json","prepared.png","original.bin"].map(name=>({path:stagePath(asset_id,name),delete:true}))
+        ];
+        const publication=await commitFiles(files,"Publish approved RPG asset "+stem);
+        return result(JSON.stringify({status:"saved",repository:owner+"/"+repo,original_path:originalPath,prepared_path:finalPath,report_path:reportPath,sha256:report.prepared.sha256,commit_sha:publication.commit_sha,atomic:true},null,2));
+      }catch(e){return result("save_asset: "+e.message,true);}
+    });r.tool("save_asset","Publica original preservado, PNG preparado e relatório técnico. Exige frase exata: APROVO SALVAR <asset_id>.",
     {asset_id:z.string().uuid(),user_approval:z.string().min(10),destination_folder:z.enum(["sprites","tilesets","maps","exports"])},
     async ({asset_id,user_approval,destination_folder})=>{
       try{
