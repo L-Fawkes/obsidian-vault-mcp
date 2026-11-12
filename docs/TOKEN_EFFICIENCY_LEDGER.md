@@ -36,3 +36,6 @@ For each process or attachment change, record: problem, before/after flow, input
 
 
 | TOK-012 | Revisão Lean integrada ao checklist do Módulo 01 e correção de status contraditórios | Documentação misturava testes sintéticos/integração real e endpoint de rascunho/comandos remotos, podendo gerar investigação e implementação duplicadas | Checklist distingue implementação, teste pendente e itens adiados; inclui sequência piloto e métricas Lean | 0 tokens diretos medidos na edição. Leitura adicional estimada em +700 a +1.100 tokens por execução; potencial economia por evitar reimplementação/retrabalho não mensurada | Low |
+
+
+| TOK-013 | Corrigir cabeçalho de status e remover tile size provisório contraditório | O cabeçalho negava exportação TMX já implementada e o princípio sugeria 48×48 px apesar da regra vigente de não inferir escala | Status separa implementação determinística de validação artística/externa; tamanho de tile passa a depender da Bíblia Visual ou confirmação explícita | 0 tokens diretos medidos; leitura da correção é pequena (estimativa +80–160 tokens por leitura integral do documento; tokenizer não medido). Evita contexto contraditório e decisões dimensionais arbitrárias; economia real não medida | Baixa |
