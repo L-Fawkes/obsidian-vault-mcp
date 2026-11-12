@@ -47,8 +47,14 @@ export function registerAssetTools(server, cfg) {
     if (response.status === 404) return null;
     if (!response.ok) throw new Error("GitHub " + response.status + ": " + (await response.text()).slice(0,200));
     const data = await response.json();
-    if (!data.content || data.encoding !== "base64") throw new Error("GitHub não retornou conteúdo base64 para " + path);
-    return Buffer.from(data.content.replace(/\\s/g, ""), "base64");
+    if (data.content && data.encoding === "base64") return Buffer.from(data.content.replace(/\\s/g, ""), "base64");
+    // Contents API omits inline content for larger files; retrieve the Git blob directly.
+    if (!data.sha) throw new Error("GitHub não retornou SHA para " + path);
+    const blobResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${data.sha}`, { headers });
+    if (!blobResponse.ok) throw new Error("Git blob " + blobResponse.status + ": " + (await blobResponse.text()).slice(0,200));
+    const blob = await blobResponse.json();
+    if (blob.encoding !== "base64" || !blob.content) throw new Error("Blob sem conteúdo base64 para " + path);
+    return Buffer.from(blob.content.replace(/\\s/g, ""), "base64");
   }
   async function remove(path, message) {
     const response = await fetch(api + path.split("/").map(encodeURIComponent).join("/") + "?ref=" + encodeURIComponent(branch), { headers });
