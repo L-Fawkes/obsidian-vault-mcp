@@ -34,3 +34,11 @@ test("final files and staging cleanup are submitted in one atomic commit", () =>
 test("atomic branch update refuses force-push", () => {
   assert.match(source, /method:"PATCH"[\s\S]*?force:false/);
 });
+
+test("MCP exposes confirmed slicing, staged atlas, and explicit Tiled export tools", () => {
+  assert.match(source, /server\.tool\("slice_asset_elements"/);
+  assert.match(source, /server\.tool\("build_asset_atlas"/);
+  assert.match(source, /server\.tool\("export_tiled_files"/);
+  assert.match(source, /manifest\.source_sha256!==a\.outputSha256/);
+  assert.match(source, /requires_tiled_application_validation:true/);
+});
