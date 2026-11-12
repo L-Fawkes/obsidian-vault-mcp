@@ -113,3 +113,16 @@ Optional human review tools:
 - Tiled for assembling and validating TSX/TMX maps.
 
 No paid image-generation API is required for deterministic image operations. The quality of artistic reconstruction must be reviewed; it cannot be guaranteed by resizing, palette mapping, or AI analysis alone.
+
+
+## Atomic persistence and hash-bound approval
+
+Staging writes and final publication use the Git Data API (blobs, one tree, one commit, then a non-forced branch ref update). A staging update writes the immutable original only on initial preparation; pixel edits update only the prepared PNG and metadata in the same commit.
+
+Final publication creates the preserved original, approved PNG, and provenance report while removing the three staging files in one Git commit. If the branch reference cannot be advanced, the publication is not reported as complete and staging remains available.
+
+Before calling `save_asset`, retrieve the current prepared SHA-256 from validation/preview metadata and obtain explicit user confirmation of the exact phrase:
+
+`APROVO SALVAR <asset_id> <prepared_sha256>`
+
+The tool also requires `approved_sha256` and checks it against the current staged PNG hash. Any intervening edit invalidates the approval and requires a new preview and confirmation.
