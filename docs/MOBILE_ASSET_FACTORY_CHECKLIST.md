@@ -14,11 +14,11 @@ Princípio: preservar originais; nenhuma publicação final sem aprovação expl
 - [x] Separação de credenciais do vault e do repositório de assets via ASSETS_*.
 - [x] Documentação inicial da arquitetura em docs/ASSET_PIPELINE.md.
 - [ ] Confirmar que a branch está implantada no Render. A existência no GitHub não prova deploy.
-- [ ] Confirmar variáveis ASSETS_GITHUB_TOKEN, ASSETS_GITHUB_OWNER, ASSETS_GITHUB_REPO e ASSETS_GITHUB_BRANCH no Render.
-- [ ] Confirmar ASSETS_UPLOAD_SECRET para habilitar o formulário móvel.
+- [x] Declarar ASSETS_GITHUB_TOKEN, ASSETS_GITHUB_OWNER, ASSETS_GITHUB_REPO e ASSETS_GITHUB_BRANCH em render.yaml (ainda requer sincronização/valores no painel Render).
+- [x] Declarar ASSETS_UPLOAD_SECRET em render.yaml (ainda requer valor no painel Render).
 - [ ] Confirmar que o conector Claude aponta para o serviço atualizado e lista as ferramentas.
 
-## Bloqueador técnico encontrado
+## Estado atualizado — 2026-11-12\n\n- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.\n- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.\n- [ ] O protótipo ainda não possui API de comandos externos para o Claude; a interface manual é apenas a primeira fatia.\n- [ ] O protótipo ainda não salva/carrega projetos em nuvem nem envia PNG aprovado ao repositório.\n\n## Bloqueador técnico encontrado
 
 O transporte MCP está configurado como stateless: buildServer() cria uma instância nova por requisição HTTP. Porém asset-tools.js guarda os resultados de prepare_asset em um Map em memória. Assim, validate_asset, preview_asset e save_asset podem receber outra instância e não encontrar o asset_id. O próprio código retorna "Asset expirado ou sessão reiniciada".
 
@@ -58,7 +58,7 @@ Correção necessária antes de considerar o ciclo prepare → validate → prev
 - [ ] Claude lista e abre a referência pelo MCP.
 - [ ] prepare_asset gera uma cópia; o asset continua disponível na chamada seguinte.
 - [ ] validate_asset e preview_asset funcionam em requisições separadas.
-- [ ] Editor abre a referência, permite desenhar em camada separada e exporta PNG.
+- [x] Protótipo inicial do editor web criado em public/editor.html: abrir referência, camada transparente separada, lápis, borracha, conta-gotas, grade, zoom, desfazer e exportar PNG. Não foi testado em navegador real ainda.
 - [ ] Recorte de um elemento com caixa delimitadora aprovada.
 - [ ] Atlas + TSX gerados e validados.
 - [ ] TMX mínimo com layer e tile placement abre no Tiled.
