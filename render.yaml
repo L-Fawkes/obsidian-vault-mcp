@@ -26,3 +26,5 @@ services:
         value: main
       - key: ASSETS_UPLOAD_SECRET
         sync: false
+      - key: EDITOR_ACCESS_SECRET
+        sync: false
