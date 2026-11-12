@@ -24,7 +24,8 @@ Princípio: preservar originais; nenhuma publicação final sem aprovação expl
 - [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.
 - [x] Endpoint autenticado de rascunho existe; [ ] ainda não há API de comandos remotos do Claude para controlar o canvas em tempo real (fora do gate essencial do Módulo 01, salvo se o teste móvel demonstrar necessidade).
 - [x] O editor envia rascunho PNG para repositório privado por endpoint autenticado; ainda não há sincronização bidirecional/live.
-\n## Estado da persistência e publicação
+
+## Estado da persistência e publicação
 
 O transporte MCP é stateless: cada requisição cria uma nova instância do servidor. Por isso, o fluxo não depende de Map em memória. `prepare_asset` grava original, PNG preparado e metadata em `.staging/<UUID>/` no repositório privado. `validate_asset`, `preview_asset` e `save_asset` recuperam os arquivos em chamadas independentes e verificam SHA-256. A leitura usa Git Blobs quando a Contents API não fornece conteúdo inline para arquivos maiores.
 
