@@ -33,3 +33,6 @@ For each process or attachment change, record: problem, before/after flow, input
 
 
 | TOK-011 | Especificação operacional do Módulo 01 e reconciliação do status da pipeline | Claude precisava deduzir etapas/gates e podia re-investigar funções já implementadas por documentação contraditória | Um roteiro único define cinco categorias, manifestos, gates e critérios; status da pipeline foi reconciliado | 0 tokens diretos medidos nesta edição; economia futura não mensurada. A leitura do novo roteiro acrescenta contexto: estimativa de +1.000 a +1.600 tokens por execução completa, dependendo do tokenizer/modelo e do quanto Claude já conhece; confiança baixa | Low |
+
+
+| TOK-012 | Revisão Lean integrada ao checklist do Módulo 01 e correção de status contraditórios | Documentação misturava testes sintéticos/integração real e endpoint de rascunho/comandos remotos, podendo gerar investigação e implementação duplicadas | Checklist distingue implementação, teste pendente e itens adiados; inclui sequência piloto e métricas Lean | 0 tokens diretos medidos na edição. Leitura adicional estimada em +700 a +1.100 tokens por execução; potencial economia por evitar reimplementação/retrabalho não mensurada | Low |
