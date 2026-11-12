@@ -177,9 +177,18 @@ export function registerAssetTools(server, cfg) {
         const originalExt=a.format==="jpeg"?"jpg":a.format;
         const originalPath="references/originals/"+stem+"."+originalExt,finalPath=destination_folder+"/"+stem+".png",reportPath="reports/"+stem+".json";
         const report={asset_id,saved_at:new Date().toISOString(),original_path:originalPath,prepared_path:finalPath,original:{format:a.format,width:a.sourceWidth,height:a.sourceHeight,bytes:a.original.length,sha256:a.originalSha256},prepared:{format:"png",width:a.width,height:a.height,bytes:a.output.length,sha256:a.outputSha256},processing:a.options,approval:"explicit_user_confirmation"};
-        await put(originalPath,a.original,"Preserve original "+stem);
-        await put(finalPath,a.output,"Save approved RPG asset "+stem);
-        await put(reportPath,Buffer.from(JSON.stringify(report,null,2)),"Add asset report "+stem);
+        const created=[];
+        try {
+          await put(originalPath,a.original,"Preserve original "+stem); created.push(originalPath);
+          await put(finalPath,a.output,"Save approved RPG asset "+stem); created.push(finalPath);
+          await put(reportPath,Buffer.from(JSON.stringify(report,null,2)),"Add asset report "+stem); created.push(reportPath);
+        } catch (publishError) {
+          for (const path of created.reverse()) {
+            try { await remove(path,"Rollback incomplete RPG asset publication "+asset_id); }
+            catch (rollbackError) { console.error("Publication rollback warning:",path,rollbackError.message); }
+          }
+          throw new Error("Falha na publicação; staging preservado para nova tentativa. "+publishError.message);
+        }
         await clearStage(asset_id);
         return result(JSON.stringify({status:"saved",repository:owner+"/"+repo,original_path:originalPath,prepared_path:finalPath,report_path:reportPath,sha256:report.prepared.sha256},null,2));
       }catch(e){return result("save_asset: "+e.message,true);}
