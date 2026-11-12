@@ -790,7 +790,7 @@ app.post("/assets-upload", (req, res) => {
         return res.status(400).send("Imagem inválida ou acima de 24 megapixels.");
       }
       const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
-      const ext = original.toLowerCase().match(/\\.(png|jpe?g|webp|gif)$/)?.[0];
+      const ext = original.toLowerCase().match(/\.(png|jpe?g|webp|gif)$/)?.[0];
       if (!ext) return res.status(400).send("Extensão de imagem inválida.");
       const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${original}`;
       const path = `references/inbox/${filename}`;
