@@ -773,11 +773,22 @@ app.get("/assets-upload", (_req, res) => {
 
 app.post("/assets-upload", (req, res) => {
   if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
+  // Header/query credentials can be checked before buffering. The legacy HTML form
+  // sends its password as a multipart field, so that fallback is checked after multer.
+  const earlySecret = req.headers.authorization?.replace(/^Bearer\\s+/i, "") || req.query?.secret;
+  if (earlySecret && !safeSecretEqual(earlySecret, ASSETS_UPLOAD_SECRET)) {
+    return res.status(401).send("Senha incorreta. Volte e tente novamente.");
+  }
   upload.single("image")(req, res, async (err) => {
     if (err) return res.status(400).send(`Falha no envio: ${err.message}`);
-    if (!safeSecretEqual(req.body?.secret, ASSETS_UPLOAD_SECRET)) return res.status(401).send("Senha incorreta. Volte e tente novamente.");
+    if (!earlySecret && !safeSecretEqual(req.body?.secret, ASSETS_UPLOAD_SECRET)) return res.status(401).send("Senha incorreta. Volte e tente novamente.");
     if (!req.file) return res.status(400).send("Nenhuma imagem foi selecionada.");
     try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(req.file.buffer, { limitInputPixels: 24000000 }).metadata();
+      if (!["png", "jpeg", "webp", "gif"].includes(meta.format) || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
+        return res.status(400).send("Imagem inválida ou acima de 24 megapixels.");
+      }
       const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
       const ext = original.toLowerCase().match(/\\.(png|jpe?g|webp|gif)$/)?.[0];
       if (!ext) return res.status(400).send("Extensão de imagem inválida.");
@@ -787,11 +798,7 @@ app.post("/assets-upload", (req, res) => {
       const ghRes = await fetch(url, {
         method: "PUT",
         headers: { ...assetHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: `Add RPG reference image: ${filename}`,
-          content: req.file.buffer.toString("base64"),
-          branch: ASSETS_GITHUB_BRANCH,
-        }),
+        body: JSON.stringify({ message: `Add RPG reference image: ${filename}`, content: req.file.buffer.toString("base64"), branch: ASSETS_GITHUB_BRANCH }),
       });
       if (!ghRes.ok) {
         const detail = await ghRes.text().catch(() => "");
