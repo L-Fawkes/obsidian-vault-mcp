@@ -7,7 +7,7 @@ const STAGING_PREFIX = ".staging";
 
 function cleanName(value) {
   return String(value || "asset").split(/[\\/]/).pop().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "").slice(0, 80) || "asset";
 }
 function rgb(hex) {
@@ -47,14 +47,14 @@ export function registerAssetTools(server, cfg) {
     if (response.status === 404) return null;
     if (!response.ok) throw new Error("GitHub " + response.status + ": " + (await response.text()).slice(0,200));
     const data = await response.json();
-    if (data.content && data.encoding === "base64") return Buffer.from(data.content.replace(/\\s/g, ""), "base64");
+    if (data.content && data.encoding === "base64") return Buffer.from(data.content.replace(/\s/g, ""), "base64");
     // Contents API omits inline content for larger files; retrieve the Git blob directly.
     if (!data.sha) throw new Error("GitHub não retornou SHA para " + path);
     const blobResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${data.sha}`, { headers });
     if (!blobResponse.ok) throw new Error("Git blob " + blobResponse.status + ": " + (await blobResponse.text()).slice(0,200));
     const blob = await blobResponse.json();
     if (blob.encoding !== "base64" || !blob.content) throw new Error("Blob sem conteúdo base64 para " + path);
-    return Buffer.from(blob.content.replace(/\\s/g, ""), "base64");
+    return Buffer.from(blob.content.replace(/\s/g, ""), "base64");
   }
   async function remove(path, message) {
     const response = await fetch(api + path.split("/").map(encodeURIComponent).join("/") + "?ref=" + encodeURIComponent(branch), { headers });
@@ -116,7 +116,7 @@ export function registerAssetTools(server, cfg) {
     async (args) => {
       try {
         if (!token || !owner || !repo) throw new Error("Credenciais RPG-assets não configuradas.");
-        const encoded=args.image_base64.replace(/^data:image\\/[^;]+;base64,/i,"");
+        const encoded=args.image_base64.replace(/^data:image\/[^;]+;base64,/i,"");
         if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error("Base64 inválido.");
         const input=Buffer.from(encoded,"base64");
         if (!input.length || input.length>MAX_BYTES) throw new Error("Imagem vazia ou acima de 12 MB.");
@@ -136,7 +136,7 @@ export function registerAssetTools(server, cfg) {
         if(args.palette?.length){const colors=args.palette.map(rgb);for(let i=0;i<data.length;i+=channels){if(data[i+3]===0)continue;const current=[data[i],data[i+1],data[i+2]];let best=colors[0],d=Infinity;for(const c of colors){const next=dist(current,c);if(next<d){d=next;best=c;}}data[i]=best[0];data[i+1]=best[1];data[i+2]=best[2];}}
         const output=await sharp(data,{raw:raw.info}).png().toBuffer();
         const om=await sharp(output).metadata(),id=randomUUID();
-        const asset={id,name:cleanName(args.original_filename||"asset").replace(/\\.(png|jpe?g|webp|gif)$/i,""),original:input,output,width:om.width,height:om.height,format:meta.format,sourceWidth:meta.width,sourceHeight:meta.height,options:{grid_size:args.grid_size||null,background_keyed:!!args.background_color,palette_remapped:!!args.palette?.length}};
+        const asset={id,name:cleanName(args.original_filename||"asset").replace(/\.(png|jpe?g|webp|gif)$/i,""),original:input,output,width:om.width,height:om.height,format:meta.format,sourceWidth:meta.width,sourceHeight:meta.height,options:{grid_size:args.grid_size||null,background_keyed:!!args.background_color,palette_remapped:!!args.palette?.length}};
         await saveStage(asset);
         return result(JSON.stringify({asset_id:id,status:"prepared_not_saved",staging:"durable_private_repository",original:{format:meta.format,width:meta.width,height:meta.height,bytes:input.length,sha256:sha256(input)},prepared:{format:"png",width:om.width,height:om.height,bytes:output.length,sha256:sha256(output)},options:asset.options,next:["validate_asset","preview_asset","aguardar aprovação explícita","save_asset"]},null,2));
       }catch(e){return result("prepare_asset: "+e.message,true);}
