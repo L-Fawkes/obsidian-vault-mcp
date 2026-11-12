@@ -16,3 +16,13 @@ services:
         value: main
       - key: MCP_SHARED_SECRET
         sync: false
+      - key: ASSETS_GITHUB_TOKEN
+        sync: false
+      - key: ASSETS_GITHUB_OWNER
+        value: L-Fawkes
+      - key: ASSETS_GITHUB_REPO
+        value: RPG-assets
+      - key: ASSETS_GITHUB_BRANCH
+        value: main
+      - key: ASSETS_UPLOAD_SECRET
+        sync: false
