@@ -28,3 +28,5 @@ No reliable model-usage telemetry is wired into this repository. Therefore no nu
 ## Required entry for future changes
 
 For each process or attachment change, record: problem, before/after flow, input/output token delta per operation, operation frequency, cumulative expected delta, measurement method, confidence, and any new token cost.
+
+| TOK-010 | Retry atomic Git commits on recognized concurrent branch updates | Concurrent MCP calls could collide at branch ref update and require manual retry | Rebuild commit against newest HEAD, at most 3 attempts, no force push; unknown errors fail closed | 0 measured direct model tokens; avoids repeated user/Claude intervention in recognized conflicts, but actual savings unmeasured | Medium |
