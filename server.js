@@ -768,30 +768,31 @@ function safeSecretEqual(provided, expected) {
 
 app.get("/assets-upload", (_req, res) => {
   if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
-  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form method="post" action="/assets-upload" enctype="multipart/form-data"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 12 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button></form></main></html>`);
+  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}#status{white-space:pre-wrap}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form id="upload-form"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 12 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button><p id="status" role="status"></p></form></main><script>document.getElementById("upload-form").addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector("button"),status=document.getElementById("status"),data=new FormData(form),secret=data.get("secret");data.delete("secret");button.disabled=true;status.textContent="Enviando...";try{const response=await fetch("/assets-upload",{method:"POST",headers:{Authorization:"Bearer "+secret},body:data});const body=await response.text();if(!response.ok)throw new Error(body||"Falha no envio.");status.textContent=body;form.reset();}catch(error){status.textContent=error.message;}finally{button.disabled=false;}});</script></html>`);
 });
 
 app.post("/assets-upload", (req, res) => {
   if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
-  // Header/query credentials can be checked before buffering. The legacy HTML form
-  // sends its password as a multipart field, so that fallback is checked after multer.
-  const earlySecret = req.headers.authorization?.replace(/^Bearer\\s+/i, "") || req.query?.secret;
-  if (earlySecret && !safeSecretEqual(earlySecret, ASSETS_UPLOAD_SECRET)) {
+  const provided = req.headers.authorization?.replace(/^Bearer\\s+/i, "");
+  if (!safeSecretEqual(provided, ASSETS_UPLOAD_SECRET)) {
     return res.status(401).send("Senha incorreta. Volte e tente novamente.");
   }
   upload.single("image")(req, res, async (err) => {
     if (err) return res.status(400).send(`Falha no envio: ${err.message}`);
-    if (!earlySecret && !safeSecretEqual(req.body?.secret, ASSETS_UPLOAD_SECRET)) return res.status(401).send("Senha incorreta. Volte e tente novamente.");
     if (!req.file) return res.status(400).send("Nenhuma imagem foi selecionada.");
     try {
       const sharp = (await import("sharp")).default;
       const meta = await sharp(req.file.buffer, { limitInputPixels: 24000000 }).metadata();
-      if (!["png", "jpeg", "webp", "gif"].includes(meta.format) || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
-        return res.status(400).send("Imagem inválida ou acima de 24 megapixels.");
+      const expectedMime = ({ png: "image/png", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[meta.format];
+      if (!expectedMime || expectedMime !== req.file.mimetype || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
+        return res.status(400).send("Formato, MIME ou dimensões da imagem inválidos.");
       }
       const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
-      const ext = original.toLowerCase().match(/\.(png|jpe?g|webp|gif)$/)?.[0];
-      if (!ext) return res.status(400).send("Extensão de imagem inválida.");
+      const ext = original.toLowerCase().match(/\\.(png|jpe?g|webp|gif)$/)?.[0];
+      const expectedExt = ({ png: ".png", jpeg: [".jpg", ".jpeg"], webp: ".webp", gif: ".gif" })[meta.format];
+      if (!ext || !(Array.isArray(expectedExt) ? expectedExt.includes(ext) : ext === expectedExt)) {
+        return res.status(400).send("Extensão não corresponde ao formato real da imagem.");
+      }
       const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${original}`;
       const path = `references/inbox/${filename}`;
       const url = `https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
@@ -811,7 +812,6 @@ app.post("/assets-upload", (req, res) => {
     }
   });
 });
-
 
 
 app.post("/mcp", async (req, res) => {
