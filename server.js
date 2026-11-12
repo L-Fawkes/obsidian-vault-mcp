@@ -587,7 +587,7 @@ function buildServer() {
         const data = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
         const mime = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[path.split(".").pop().toLowerCase()];
         const bytes = Buffer.from(data.content || "", data.encoding || "base64");
-        if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error("Image is empty or exceeds the 8 MB visual retrieval limit.");
+        if (!bytes.length || bytes.length > 12 * 1024 * 1024) throw new Error("Image is empty or exceeds the 12 MB visual retrieval limit.");
         return {
           content: [
             { type: "text", text: `Imagem de referência: ${path}` },
@@ -614,7 +614,7 @@ app.get("/", (_req, res) => res.send("Obsidian vault MCP server is running."));
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 12 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
     const allowed = {
       ".png": "image/png",
@@ -638,7 +638,7 @@ function safeSecretEqual(provided, expected) {
 
 app.get("/assets-upload", (_req, res) => {
   if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
-  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form method="post" action="/assets-upload" enctype="multipart/form-data"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 8 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button></form></main></html>`);
+  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form method="post" action="/assets-upload" enctype="multipart/form-data"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 12 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button></form></main></html>`);
 });
 
 app.post("/assets-upload", (req, res) => {
