@@ -225,7 +225,7 @@ export function registerAssetTools(server, cfg) {
           {name:"alpha_channel",passed:true,detail:"Canal alpha presente"},
           {name:"grid_alignment",passed:!grid_size||(a.width%grid_size===0&&a.height%grid_size===0),detail:grid_size?"Grade "+grid_size+"px":"Não solicitado"}
         ];
-        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number((100*transparent/(a.width*a.height)).toFixed(2))},null,2));
+        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number((100*transparent/(a.width*a.height)).toFixed(2))}},null,2));
       }catch(e){return result("validate_asset: "+e.message,true);}
     });
 
