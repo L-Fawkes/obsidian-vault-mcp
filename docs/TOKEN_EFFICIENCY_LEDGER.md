@@ -30,3 +30,6 @@ No reliable model-usage telemetry is wired into this repository. Therefore no nu
 For each process or attachment change, record: problem, before/after flow, input/output token delta per operation, operation frequency, cumulative expected delta, measurement method, confidence, and any new token cost.
 
 | TOK-010 | Retry atomic Git commits on recognized concurrent branch updates | Concurrent MCP calls could collide at branch ref update and require manual retry | Rebuild commit against newest HEAD, at most 3 attempts, no force push; unknown errors fail closed | 0 measured direct model tokens; avoids repeated user/Claude intervention in recognized conflicts, but actual savings unmeasured | Medium |
+
+
+| TOK-011 | Especificação operacional do Módulo 01 e reconciliação do status da pipeline | Claude precisava deduzir etapas/gates e podia re-investigar funções já implementadas por documentação contraditória | Um roteiro único define cinco categorias, manifestos, gates e critérios; status da pipeline foi reconciliado | 0 tokens diretos medidos nesta edição; economia futura não mensurada. A leitura do novo roteiro acrescenta contexto: estimativa de +1.000 a +1.600 tokens por execução completa, dependendo do tokenizer/modelo e do quanto Claude já conhece; confiança baixa | Low |
