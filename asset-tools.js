@@ -217,6 +217,21 @@ export function registerAssetTools(server, cfg) {
       }catch(e){return result("preview_asset: "+e.message,true);}
     });
 
+  server.tool("send_asset_to_editor",
+    "Envia a versão PNG preparada de um asset do staging para a galeria de prévias do editor mobile. Não salva o asset definitivo nem substitui a referência original. Use depois de validar e antes da aprovação final.",
+    {asset_id:z.string().uuid()},
+    async ({asset_id})=>{
+      try{
+        const a=await loadStage(asset_id);if(!a)throw new Error("Asset não encontrado no staging.");
+        const previewId=randomUUID();
+        const previewPath="editor-previews/"+previewId+".png";
+        const metadata={preview_id:previewId,asset_id:a.id,name:a.name,width:a.width,height:a.height,format:"png",bytes:a.output.length,sha256:sha256(a.output),created_at:new Date().toISOString(),status:"preview_not_approved",path:previewPath};
+        await put(previewPath,a.output,"Deliver RPG asset preview to mobile editor "+previewId);
+        await put("editor-previews/latest.json",Buffer.from(JSON.stringify(metadata,null,2)),"Update latest RPG editor preview metadata");
+        return {content:[{type:"text",text:JSON.stringify({status:"delivered_to_editor_not_approved",...metadata,instructions:"Abra o editor e toque em Receber prévia do Claude. O arquivo continua no staging e não foi publicado como asset final."},null,2)},{type:"image",data:a.output.toString("base64"),mimeType:"image/png"}]};
+      }catch(e){return {content:[{type:"text",text:"send_asset_to_editor: "+e.message}],isError:true};}
+    });
+
   server.tool("save_asset","Publica original preservado, PNG preparado e relatório técnico. Exige frase exata: APROVO SALVAR <asset_id>.",
     {asset_id:z.string().uuid(),user_approval:z.string().min(10),destination_folder:z.enum(["sprites","tilesets","maps","exports"])},
     async ({asset_id,user_approval,destination_folder})=>{
