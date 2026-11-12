@@ -729,7 +729,7 @@ const upload = multer({
 
 app.post("/editor/api/reference", (req, res) => {
   if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Envio de referências não configurado." });
-  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) {
     return res.status(401).json({ error: "Acesso não autorizado." });
   }
   upload.single("image")(req, res, async (err) => {
