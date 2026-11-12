@@ -1,6 +1,6 @@
 # RPG Pixel Art — Asset Pipeline
 
-Status: foundation in progress. This document describes the first testable scope; it does not claim that automatic artistic reconstruction or TMX export already exists.
+Status (2026-11-12): deterministic pipeline foundation and TSX/TMX export orchestration are implemented and CI-tested on the feature branch. Artistic reconstruction, five-category proof, live MCP/Render workflow, and Tiled application round-trip remain unverified.
 
 ## Principles
 
@@ -9,7 +9,7 @@ Status: foundation in progress. This document describes the first testable scope
 3. Treat AI as an analyst/planner and optional art assistant, not as a guarantee of pixel-perfect raster output.
 4. Use deterministic code for dimensions, nearest-neighbor scaling, grid alignment, palette mapping, alpha checks, slicing, and file export.
 5. Never publish a production asset without explicit user approval.
-6. Keep all important parameters configurable. A 48x48 px tile is the provisional starting unit, not a hard-coded global truth.
+6. Keep all important parameters configurable. Do not assume a tile size or base resolution: use the current Visual Bible; if it does not define the value, record it as unknown and block dependent exports pending confirmation.
 
 ## Planned repository layout
 
