@@ -610,6 +610,8 @@ function buildServer() {
 const app = express();
 // Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.\napp.use(express.json({ limit: "18mb" }));
 
+app.use("/editor", express.static("public", { index: "editor.html", fallthrough: false }));
+
 app.get("/", (_req, res) => res.send("Obsidian vault MCP server is running."));
 
 const upload = multer({
