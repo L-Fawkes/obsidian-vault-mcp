@@ -20,16 +20,17 @@ Princípio: preservar originais; nenhuma publicação final sem aprovação expl
 
 ## Estado atualizado — 2026-11-12\n\n- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.\n- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.\n- [ ] O protótipo ainda não possui API de comandos externos para o Claude; a interface manual é apenas a primeira fatia.\n- [ ] O protótipo ainda não salva/carrega projetos em nuvem nem envia PNG aprovado ao repositório.\n\n## Bloqueador técnico encontrado
 
-O transporte MCP está configurado como stateless: buildServer() cria uma instância nova por requisição HTTP. Porém asset-tools.js guarda os resultados de prepare_asset em um Map em memória. Assim, validate_asset, preview_asset e save_asset podem receber outra instância e não encontrar o asset_id. O próprio código retorna "Asset expirado ou sessão reiniciada".
+O transporte MCP é stateless: buildServer() cria uma instância nova por requisição HTTP. O Map em memória foi removido do fluxo de assets. prepare_asset agora grava original, PNG preparado e metadata em .staging/<UUID>/ no repositório privado RPG-assets. validate_asset, preview_asset e save_asset recuperam os arquivos em chamadas independentes e verificam SHA-256. A leitura usa Git Blobs quando a Contents API não fornece conteúdo inline para arquivos maiores.
 
-Correção necessária antes de considerar o ciclo prepare → validate → preview → save testável: persistir os artefatos temporários fora da memória do processo (por exemplo, staging privado no repositório de assets, com IDs imprevisíveis, metadados e expiração/limpeza), ou usar armazenamento durável apropriado. Não confiar em memória local do Render Free.
+A persistência está implementada no código da branch, mas ainda precisa de teste real com chamadas MCP separadas e credenciais Render. O staging é removido após publicação (limpeza best-effort); se a publicação falhar parcialmente, os arquivos temporários permanecem para recuperação.
 
 ## Segurança e integridade a validar
 
-- [ ] Validar assinatura real do arquivo e não apenas extensão/MIME.
-- [ ] Registrar SHA-256 do original e verificar que o original salvo é idêntico aos bytes recebidos.
+- [x] Validar formato real por detecção do Sharp, além de limitar os formatos aceitos.
+- [ ] Adicionar limite de taxa e expiração automática/limpeza periódica do staging.
+- [x] Registrar SHA-256 do original e do preparado; verificar integridade ao recuperar staging.
 - [ ] Validar caminhos e nomes; nunca aceitar path fornecido livremente pelo usuário.
-- [ ] Tornar gravação final idempotente e tratar falha parcial ao salvar original, PNG e relatório.
+- [ ] Tornar gravação final idempotente e transacional; hoje os três arquivos finais são commits separados e uma falha pode deixar publicação parcial.
 - [ ] Não salvar em production antes da aprovação vinculada ao asset_id e à versão exata.
 - [ ] Não colocar tokens ou senhas no frontend, no repositório ou em mensagens do Claude.
 
@@ -56,10 +57,19 @@ Correção necessária antes de considerar o ciclo prepare → validate → prev
 - [ ] Upload de uma referência pixel art pelo Chrome.
 - [ ] Imagem original armazenada sem alteração; SHA-256 verificado.
 - [ ] Claude lista e abre a referência pelo MCP.
-- [ ] prepare_asset gera uma cópia; o asset continua disponível na chamada seguinte.
+- [ ] prepare_asset grava staging durável; validate_asset e preview_asset recuperam o mesmo asset em chamadas MCP independentes (implementado, aguardando teste).
 - [ ] validate_asset e preview_asset funcionam em requisições separadas.
 - [x] Protótipo inicial do editor web criado em public/editor.html: abrir referência, camada transparente separada, lápis, borracha, conta-gotas, grade, zoom, desfazer e exportar PNG. Não foi testado em navegador real ainda.
 - [ ] Recorte de um elemento com caixa delimitadora aprovada.
 - [ ] Atlas + TSX gerados e validados.
 - [ ] TMX mínimo com layer e tile placement abre no Tiled.
 - [ ] save_asset exige aprovação explícita e mantém o original.
+
+
+## Alteração técnica — 2026-11-12
+
+- [x] Removido o Map temporário que não sobrevivia ao ciclo stateless do MCP.
+- [x] Staging privado no GitHub com UUID, original, PNG e metadados.
+- [x] Verificação SHA-256 ao reler os artefatos.
+- [x] Fallback para Git Blobs ao recuperar arquivos acima do limite de conteúdo inline da Contents API.
+- [ ] Executar teste de sintaxe e fluxo de ponta a ponta antes de integrar à branch principal.
