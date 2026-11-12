@@ -608,7 +608,8 @@ function buildServer() {
 
 // ---- HTTP transport (stateless, one MCP server instance per request) ----
 const app = express();
-// Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.\napp.use(express.json({ limit: "18mb" }));
+// Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.
+app.use(express.json({ limit: "18mb" }));
 
 app.use("/editor", express.static("public", { index: "editor.html", fallthrough: false }));
 
