@@ -18,7 +18,13 @@ Princípio: preservar originais; nenhuma publicação final sem aprovação expl
 - [x] Declarar ASSETS_UPLOAD_SECRET em render.yaml (ainda requer valor no painel Render).
 - [ ] Confirmar que o conector Claude aponta para o serviço atualizado e lista as ferramentas.
 
-## Estado atualizado — 2026-11-12\n\n- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.\n- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.\n- [x] Endpoint autenticado de rascunho existe; [ ] ainda não há API de comandos remotos do Claude para controlar o canvas em tempo real (fora do gate essencial do Módulo 01, salvo se o teste móvel demonstrar necessidade).\n- [x] O editor envia rascunho PNG para repositório privado por endpoint autenticado; ainda não há sincronização bidirecional/live.\n\n## Estado da persistência e publicação
+## Estado atualizado — 2026-11-12
+
+- [x] Rota web `/editor` adicionada ao servidor para servir o protótipo mobile.
+- [x] Configuração declarativa do Render ampliada com as variáveis ASSETS_*.
+- [x] Endpoint autenticado de rascunho existe; [ ] ainda não há API de comandos remotos do Claude para controlar o canvas em tempo real (fora do gate essencial do Módulo 01, salvo se o teste móvel demonstrar necessidade).
+- [x] O editor envia rascunho PNG para repositório privado por endpoint autenticado; ainda não há sincronização bidirecional/live.
+\n## Estado da persistência e publicação
 
 O transporte MCP é stateless: cada requisição cria uma nova instância do servidor. Por isso, o fluxo não depende de Map em memória. `prepare_asset` grava original, PNG preparado e metadata em `.staging/<UUID>/` no repositório privado. `validate_asset`, `preview_asset` e `save_asset` recuperam os arquivos em chamadas independentes e verificam SHA-256. A leitura usa Git Blobs quando a Contents API não fornece conteúdo inline para arquivos maiores.
 
