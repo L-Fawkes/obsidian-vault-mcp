@@ -90,7 +90,7 @@ Already present in the server repository:
 - Hash-bound explicit approval: the approved hash must match the exact current prepared PNG, and the confirmation phrase must match the asset ID and hash.
 
 Not yet implemented:
-- durable staging across server restarts;
+- automatic staging expiration/cleanup and operational recovery after partial GitHub API failures;
 - cryptographic provenance metadata in the asset report;
 - structured analysis manifest and approved bounding-box slicing;
 - deterministic atlas packing and tile manifest;
