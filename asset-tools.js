@@ -120,6 +120,39 @@ export function registerAssetTools(server, cfg) {
     catch(e){console.error("Staging cleanup warning:",e.message);}
   }
 
+  server.tool("cleanup_stale_asset_staging","Lista ou remove staging antigo. Padrão dry_run=true; só remove assets com metadata válida e idade superior ao TTL, sem tocar em publicações finais.",
+    {ttl_days:z.number().int().min(7).max(365).optional(),dry_run:z.boolean().optional()},
+    async ({ttl_days,dry_run})=>{
+      try{
+        const ttl=ttl_days??30, dry=dry_run??true, cutoff=Date.now()-ttl*86400000;
+        const git=`https://api.github.com/repos/${owner}/${repo}/git`;
+        const refRes=await fetch(`${git}/ref/heads/${encodeURIComponent(branch)}`,{headers});
+        if(!refRes.ok)throw new Error("GitHub "+refRes.status+" ao consultar branch.");
+        const refData=await refRes.json();
+        const commitRes=await fetch(`${git}/commits/${refData.object.sha}`,{headers});
+        if(!commitRes.ok)throw new Error("GitHub "+commitRes.status+" ao consultar árvore.");
+        const commit=await commitRes.json();
+        const treeRes=await fetch(`${git}/trees/${commit.tree.sha}?recursive=1`,{headers});
+        if(!treeRes.ok)throw new Error("GitHub "+treeRes.status+" ao listar staging.");
+        const tree=await treeRes.json();
+        if(tree.truncated)throw new Error("Árvore Git truncada; limpeza cancelada por segurança.");
+        const metadataPaths=tree.tree.filter(x=>x.type==="blob"&&/^\.staging\/[0-9a-f-]{36}\/metadata\.json$/i.test(x.path)).map(x=>x.path);
+        const candidates=[];
+        for(const path of metadataPaths){
+          const bytes=await get(path);if(!bytes)continue;
+          let meta;try{meta=JSON.parse(bytes.toString("utf8"));}catch{continue;}
+          const created=Date.parse(meta.createdAt||"");
+          if(!/^[0-9a-f-]{36}$/i.test(meta.id||"")||path!==stagePath(meta.id,"metadata.json")||!Number.isFinite(created)||created>=cutoff)continue;
+          const prefix=stagePath(meta.id,"");
+          const paths=tree.tree.filter(x=>x.type==="blob"&&x.path.startsWith(prefix)).map(x=>x.path);
+          candidates.push({asset_id:meta.id,created_at:meta.createdAt,files:paths});
+        }
+        const files=candidates.flatMap(c=>c.files.map(path=>({path,delete:true})));
+        if(!dry&&files.length)await commitFiles(files,"Expire stale RPG asset staging older than "+ttl+" days");
+        return result(JSON.stringify({status:dry?"dry_run":"cleanup_complete",ttl_days:ttl,assets:candidates.map(({asset_id,created_at,files})=>({asset_id,created_at,file_count:files.length})),assets_count:candidates.length,files_count:files.length,deleted:!dry,commit_created:!dry&&files.length>0},null,2));
+      }catch(e){return result("cleanup_stale_asset_staging: "+e.message,true);}
+    });
+
   server.tool("prepare_asset",
     "Recebe imagem base64, preserva o original e prepara PNG para o RPG. O staging é persistido no repositório privado entre chamadas MCP stateless. Suporta recorte, resize nearest-neighbor, chroma-key simples e remapeamento de paleta. Ainda não publica o asset final.",
     {
