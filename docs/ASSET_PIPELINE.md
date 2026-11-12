@@ -19,7 +19,7 @@ Status: foundation in progress. This document describes the first testable scope
 - production/tilesets/ — approved tileset PNGs and metadata
 - production/maps/ — TMX maps and related files
 - reports/ — validation and provenance reports
-- staging/ — temporary generated previews only if persistence is deliberately implemented
+- `.staging/<UUID>/` — durable private staging with original.bin, prepared.png and metadata.json; removed during successful publication
 
 ## Pipeline stages
 
@@ -82,10 +82,12 @@ Use one already-pixel-art reference image:
 ## Current implementation boundaries
 
 Already present in the server repository:
-- Sharp-based image ingestion and preparation.
-- prepare_asset, validate_asset, preview_asset, and save_asset MCP tools.
-- Reference listing and image retrieval tools.
-- GitHub-backed storage for originals, prepared PNGs, and reports.
+- Sharp-based image ingestion and preparation with actual format detection, byte/pixel limits, EXIF orientation normalization, crop, nearest-neighbor resize, chroma-key and palette remapping.
+- MCP tools prepare_asset, edit_asset_pixels, validate_asset, preview_asset and save_asset.
+- GitHub-backed durable staging in `.staging/<UUID>/` with original, prepared PNG and SHA-256 metadata.
+- SHA-256 integrity verification when staging is reloaded across stateless MCP requests.
+- Atomic Git Data API commits for staging updates and final publication; final publication includes original, PNG, provenance report and staging deletions in one commit with non-forced branch update.
+- Hash-bound explicit approval: the approved hash must match the exact current prepared PNG, and the confirmation phrase must match the asset ID and hash.
 
 Not yet implemented:
 - durable staging across server restarts;
@@ -99,7 +101,7 @@ Not yet implemented:
 
 The mobile editor now has a dedicated authenticated endpoint: `POST /editor/api/draft`. Configure a separate high-entropy `EDITOR_ACCESS_SECRET` environment variable on Render; do not reuse `GITHUB_TOKEN`, `MCP_SHARED_SECRET`, or `ASSETS_GITHUB_TOKEN`. Enter this secret only in the editor's password field when syncing. It is held in the page memory and is not written to browser storage. The endpoint accepts a PNG data URL, enforces a 12 MB and 24 MP limit, and updates `editor-drafts/latest.png` in the private assets repository. It returns a draft status only; it does not approve or publish a production asset. Claude can inspect the current draft with the `read_editor_draft` MCP tool. Rotate the dedicated secret if it is exposed.
 
-This first sync is one-way from browser to shared draft. It does not yet stream live edits from Claude back into the open canvas, and it has not yet been tested on the deployed Render service or Android Chrome.
+This sync is one-way from browser to shared draft. It does not yet stream live edits from Claude back into the open canvas. Real deployment and Android Chrome validation remain pending.
 
 ## Free toolchain
 
