@@ -670,7 +670,7 @@ app.post("/editor/api/draft", async (req, res) => {
     if (sha) body.sha = sha;
     const saved = await fetch(url, { method: "PUT", headers: { ...assetHeaders, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!saved.ok) throw new Error(`GitHub ${saved.status}: ${(await saved.text()).slice(0, 180)}`);
-    return res.json({ ok: true, path, width: metadata.width, height: metadata.height, status: "draft_not_approved" });
+    return res.json({ ok: true, path, width: metadata.width, height: metadata.height, format: metadata.format, channels: metadata.channels, bytes: bytes.length, status: "draft_not_approved" });
   } catch (err) {
     console.error("Editor draft sync failed:", err.message);
     return res.status(502).json({ error: "Não foi possível sincronizar o rascunho." });
