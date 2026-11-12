@@ -773,7 +773,7 @@ app.get("/assets-upload", (_req, res) => {
 
 app.post("/assets-upload", (req, res) => {
   if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
-  const provided = req.headers.authorization?.replace(/^Bearer\\s+/i, "");
+  const provided = req.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (!safeSecretEqual(provided, ASSETS_UPLOAD_SECRET)) {
     return res.status(401).send("Senha incorreta. Volte e tente novamente.");
   }
@@ -788,7 +788,7 @@ app.post("/assets-upload", (req, res) => {
         return res.status(400).send("Formato, MIME ou dimensões da imagem inválidos.");
       }
       const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
-      const ext = original.toLowerCase().match(/\\.(png|jpe?g|webp|gif)$/)?.[0];
+      const ext = original.toLowerCase().match(/\.(png|jpe?g|webp|gif)$/)?.[0];
       const expectedExt = ({ png: ".png", jpeg: [".jpg", ".jpeg"], webp: ".webp", gif: ".gif" })[meta.format];
       if (!ext || !(Array.isArray(expectedExt) ? expectedExt.includes(ext) : ext === expectedExt)) {
         return res.status(400).send("Extensão não corresponde ao formato real da imagem.");
