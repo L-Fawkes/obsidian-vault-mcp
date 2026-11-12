@@ -679,17 +679,17 @@ app.post("/editor/api/draft", async (req, res) => {
 
 app.get("/editor/api/preview", async (req, res) => {
   if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Recepção de prévias não configurada." });
-  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\\s+/i, ""), EDITOR_ACCESS_SECRET)) return res.status(401).json({ error: "Acesso não autorizado." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) return res.status(401).json({ error: "Acesso não autorizado." });
   try {
     const base = `${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/`;
     const metaRes = await fetch(base + assetRepoPath("editor-previews/latest.json") + "?ref=" + encodeURIComponent(ASSETS_GITHUB_BRANCH), { headers: assetHeaders });
     if (metaRes.status === 404) return res.status(404).json({ error: "Claude ainda não enviou nenhuma prévia." });
     if (!metaRes.ok) throw new Error("GitHub " + metaRes.status + " ao consultar metadados.");
     const metaFile = await metaRes.json();
-    const metaBytes = metaFile.content && metaFile.encoding === "base64" ? Buffer.from(metaFile.content.replace(/\\s/g,""),"base64") : null;
+    const metaBytes = metaFile.content && metaFile.encoding === "base64" ? Buffer.from(metaFile.content.replace(/\s/g,""),"base64") : null;
     if (!metaBytes) throw new Error("Metadados da prévia indisponíveis.");
     const metadata = JSON.parse(metaBytes.toString("utf8"));
-    if (!/^editor-previews\\/[0-9a-f-]{36}\\.png$/i.test(metadata.path || "")) throw new Error("Caminho de prévia inválido.");
+    if (!/^editor-previews\/[0-9a-f-]{36}\.png$/i.test(metadata.path || "")) throw new Error("Caminho de prévia inválido.");
     const imageRes = await fetch(base + assetRepoPath(metadata.path) + "?ref=" + encodeURIComponent(ASSETS_GITHUB_BRANCH), { headers: assetHeaders });
     if (!imageRes.ok) throw new Error("GitHub " + imageRes.status + " ao buscar PNG.");
     const imageFile = await imageRes.json();
