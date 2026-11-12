@@ -61,9 +61,11 @@ A publicação final usa Git Data API: cria blobs, uma árvore, um commit conten
 - [ ] prepare_asset grava staging durável; validate_asset e preview_asset recuperam o mesmo asset em chamadas MCP independentes (implementado, aguardando teste).
 - [ ] validate_asset e preview_asset funcionam em requisições separadas.
 - [x] Protótipo inicial do editor web criado em public/editor.html: abrir referência, camada transparente separada, lápis, borracha, conta-gotas, grade, zoom, desfazer e exportar PNG. Não foi testado em navegador real ainda.
-- [ ] Recorte de um elemento com caixa delimitadora aprovada.
-- [ ] Atlas + TSX gerados e validados.
-- [ ] TMX mínimo com layer e tile placement abre no Tiled.
+- [x] Ferramenta MCP de recorte por caixas confirmadas; persistência de PNGs + manifesto no staging (validação visual real pendente).
+- [x] Ferramenta MCP de atlas determinístico + manifesto; valida SHA-256 dos recortes (validação visual real pendente).
+- [x] Ferramenta MCP de exportação TSX e TMX por parâmetros explícitos; arquivos ficam no staging.
+- [ ] Confirmar que a imagem referenciada no TSX existe no caminho real do projeto.
+- [ ] Abrir atlas/TSX/TMX no Tiled e validar compatibilidade real.
 - [ ] save_asset exige aprovação explícita e mantém o original.
 
 
@@ -95,3 +97,13 @@ A publicação final usa Git Data API: cria blobs, uma árvore, um commit conten
 - [x] Workflow GitHub Actions criado em `.github/workflows/validate.yml` para instalar dependências e executar `npm run check`.
 - [x] GitHub Actions `Asset pipeline checks` passou no push e no pull_request para o commit dd981bb (2026-11-12).
 - [ ] Revisar e testar o deploy no Render antes de qualquer publicação na branch principal.
+
+
+## Integração MCP de recorte e exportação — 2026-11-12
+
+- [x] `slice_asset_elements`: aceita apenas caixas explícitas, valida limites e IDs, salva PNGs + manifesto com hash da fonte no staging.
+- [x] `build_asset_atlas`: verifica hash da fonte e dos recortes antes de compor atlas e manifesto.
+- [x] `export_tiled_files`: gera TSX e TMX opcional com placements explícitos; saída permanece no staging.
+- [ ] Testar as três ferramentas em requisições MCP stateless reais no Render.
+- [ ] Verificar imagem referenciada, TSX e TMX abrindo no Tiled.
+- [ ] Validar que o conector Claude atualizado lista as novas ferramentas.
