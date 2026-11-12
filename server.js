@@ -21,8 +21,9 @@ const ASSETS_GITHUB_REPO = process.env.ASSETS_GITHUB_REPO;
 const ASSETS_GITHUB_BRANCH = process.env.ASSETS_GITHUB_BRANCH || "main";
 const ASSETS_UPLOAD_SECRET = process.env.ASSETS_UPLOAD_SECRET;
 const ASSETS_ENABLED = Boolean(
-  ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO && ASSETS_UPLOAD_SECRET
+  ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO
 );
+const ASSETS_UPLOAD_ENABLED = Boolean(ASSETS_ENABLED && ASSETS_UPLOAD_SECRET);
 
 if (!GITHUB_TOKEN || !GITHUB_OWNER || !GITHUB_REPO) {
   console.error("Missing required env vars: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO");
@@ -607,7 +608,7 @@ function buildServer() {
 
 // ---- HTTP transport (stateless, one MCP server instance per request) ----
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+// Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.\napp.use(express.json({ limit: "18mb" }));
 
 app.get("/", (_req, res) => res.send("Obsidian vault MCP server is running."));
 
@@ -636,12 +637,12 @@ function safeSecretEqual(provided, expected) {
 }
 
 app.get("/assets-upload", (_req, res) => {
-  if (!ASSETS_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
+  if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
   res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form method="post" action="/assets-upload" enctype="multipart/form-data"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 8 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button></form></main></html>`);
 });
 
 app.post("/assets-upload", (req, res) => {
-  if (!ASSETS_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
+  if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
   upload.single("image")(req, res, async (err) => {
     if (err) return res.status(400).send(`Falha no envio: ${err.message}`);
     if (!safeSecretEqual(req.body?.secret, ASSETS_UPLOAD_SECRET)) return res.status(401).send("Senha incorreta. Volte e tente novamente.");
