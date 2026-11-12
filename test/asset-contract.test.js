@@ -42,3 +42,7 @@ test("MCP exposes confirmed slicing, staged atlas, and explicit Tiled export too
   assert.match(source, /manifest\.source_sha256!==a\.outputSha256/);
   assert.match(source, /requires_tiled_application_validation:true/);
 });
+
+test("TMX export rejects GIDs beyond declared tileset count", () => {
+  assert.match(source, /placements\.some\(p=>p\.gid>args\.tile_count\)/);
+});
