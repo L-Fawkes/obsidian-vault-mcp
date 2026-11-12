@@ -647,12 +647,12 @@ app.use("/editor", express.static("public", { index: "editor.html", fallthrough:
 // The editor uses a dedicated credential; never expose GitHub or MCP credentials in the browser.
 app.post("/editor/api/draft", async (req, res) => {
   if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Sincronização do editor não configurada." });
-  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) {
     return res.status(401).json({ error: "Acesso não autorizado." });
   }
   try {
     const payload = req.body || {};
-    const encoded = String(payload.image_base64 || "").replace(/^data:image\\/png;base64,/i, "");
+    const encoded = String(payload.image_base64 || "").replace(/^data:image\/png;base64,/i, "");
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return res.status(400).json({ error: "PNG em base64 inválido." });
     const bytes = Buffer.from(encoded, "base64");
     if (!bytes.length || bytes.length > 12 * 1024 * 1024) return res.status(413).json({ error: "PNG vazio ou acima de 12 MB." });
