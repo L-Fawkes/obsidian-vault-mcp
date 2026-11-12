@@ -56,3 +56,11 @@ test("staging cleanup is dry-run by default and protects malformed or recent met
   assert.match(source, /path!==stagePath\(meta\.id,"metadata\.json"\)/);
   assert.match(source, /commitFiles\(files,"Expire stale RPG asset staging/);
 });
+
+test("Git commit helper retries only recognized non-fast-forward conflicts without force push", () => {
+  assert.match(source, /attempt<=3/);
+  assert.match(source, /updateRes\.status===422/);
+  assert.match(source, /force:false/);
+  assert.match(source, /fast\.?forward\|reference update failed/);
+  assert.match(source, /reconstruindo commit sobre HEAD atualizado/);
+});
