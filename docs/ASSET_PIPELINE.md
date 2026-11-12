@@ -154,3 +154,8 @@ The TSX tool accepts a caller-supplied image source and dimensions; the caller m
 ## Staging lifecycle cleanup
 
 The MCP tool `cleanup_stale_asset_staging` lists stale candidates by default without deleting anything. Its default TTL is 30 days (configurable from 7 to 365 days). Deletion requires an explicit `dry_run: false` call. Only staging directories with valid UUID metadata, a matching metadata path and a parseable `createdAt` older than the TTL are eligible. If GitHub reports a truncated recursive tree, cleanup aborts rather than guessing. It deletes only files below the matching `.staging/<asset-id>/` directory and commits the deletions together. Production asset folders are outside its scope.
+
+
+## Concurrent staging writes
+
+Multi-file commits are rebuilt from the latest branch head when GitHub explicitly rejects a non-fast-forward ref update (HTTP 422 with a recognized concurrency message). The helper retries at most three total attempts, never force-pushes, and fails closed for permission, validation, network, or unrecognized errors. A retry recreates the tree and commit on the newest parent; any unreachable intermediate Git objects are harmless and are not referenced by the branch.
