@@ -21,6 +21,10 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Dependency audit summary
+        run: |
+          npm audit --json > npm-audit.json || true
+          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('npm-audit.json','utf8')); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, packages:Object.entries(a.vulnerabilities ?? {}).map(([name,v])=>({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable}))},null,2));"
       - name: Syntax checks
         run: npm run check
       - name: Asset pipeline regression tests
