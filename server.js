@@ -721,7 +721,7 @@ const upload = multer({
       ".webp": "image/webp",
       ".gif": "image/gif",
     };
-    const ext = file.originalname.toLowerCase().match(/\\.[^.]+$/)?.[0];
+    const ext = file.originalname.toLowerCase().match(/\.[^.]+$/)?.[0];
     if (!ext || allowed[ext] !== file.mimetype) return cb(new Error("Formato não permitido. Use PNG, JPG, WEBP ou GIF."));
     cb(null, true);
   },
