@@ -1,0 +1,27 @@
+name: Asset pipeline checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/asset-pipeline-foundation]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Syntax checks
+        run: npm run check
+      - name: Asset pipeline regression tests
+        run: npm test
