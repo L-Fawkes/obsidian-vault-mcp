@@ -128,3 +128,14 @@ Before calling `save_asset`, retrieve the current prepared SHA-256 from validati
 `APROVO SALVAR <asset_id> <prepared_sha256>`
 
 The tool also requires `approved_sha256` and checks it against the current staged PNG hash. Any intervening edit invalidates the approval and requires a new preview and confirmation.
+
+
+## Deterministic export primitives (initial implementation)
+
+The branch now includes `asset-export.js`:
+- `sliceConfirmedBoxes`: crops only caller-confirmed integer rectangles, checks source bounds, unique stable IDs and a maximum of 512 elements; emits PNG crops and SHA-256 hashes.
+- `packAtlas`: deterministic shelf packing in input order, transparent RGBA atlas, configurable padding/margin/maximum width and a JSON manifest with coordinates, dimensions and source hashes.
+- `createTsx`: emits a Tiled XML tileset definition after validating tile geometry against the image dimensions.
+- `createTmx`: emits an orthogonal finite map with a CSV layer only from explicit cell placements; duplicate cells, invalid GIDs and out-of-bounds coordinates are rejected.
+
+These are pure export primitives with behavioral tests; they are not yet exposed as MCP tools and do not yet persist sliced elements or atlases to staging. The current atlas packer is intended for standalone sprites/atlas metadata, while TSX tile-grid export requires a regular tileset image. Do not treat an arbitrary packed sprite atlas as a uniform tile sheet. Tiled application round-trip testing remains a required acceptance step.
