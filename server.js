@@ -20,9 +20,11 @@ const ASSETS_GITHUB_OWNER = process.env.ASSETS_GITHUB_OWNER;
 const ASSETS_GITHUB_REPO = process.env.ASSETS_GITHUB_REPO;
 const ASSETS_GITHUB_BRANCH = process.env.ASSETS_GITHUB_BRANCH || "main";
 const ASSETS_UPLOAD_SECRET = process.env.ASSETS_UPLOAD_SECRET;
+const EDITOR_ACCESS_SECRET = process.env.EDITOR_ACCESS_SECRET;
 const ASSETS_ENABLED = Boolean(
-  ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO && ASSETS_UPLOAD_SECRET
+  ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO
 );
+const ASSETS_UPLOAD_ENABLED = Boolean(ASSETS_ENABLED && ASSETS_UPLOAD_SECRET);
 
 if (!GITHUB_TOKEN || !GITHUB_OWNER || !GITHUB_REPO) {
   console.error("Missing required env vars: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO");
@@ -559,11 +561,11 @@ function buildServer() {
         if (!ASSETS_ENABLED) throw new Error("RPG asset connection is not configured on the server.");
         const tree = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/trees/${ASSETS_GITHUB_BRANCH}?recursive=1`);
         const files = (tree.tree || [])
-          .filter((item) => item.type === "blob" && item.path.startsWith("references/inbox/") && /\\.(png|jpe?g|webp|gif)$/i.test(item.path))
+          .filter((item) => item.type === "blob" && item.path.startsWith("references/inbox/") && /\.(png|jpe?g|webp|gif)$/i.test(item.path))
           .sort((a, b) => b.path.localeCompare(a.path))
           .slice(0, limit || 15)
           .map((item) => item.path);
-        return { content: [{ type: "text", text: files.length ? files.join("\\n") : "Nenhuma imagem encontrada em references/inbox/." }] };
+        return { content: [{ type: "text", text: files.length ? files.join("\n") : "Nenhuma imagem encontrada em references/inbox/." }] };
       } catch (err) {
         return { content: [{ type: "text", text: `Erro ao listar referências: ${err.message}` }], isError: true };
       }
@@ -582,11 +584,17 @@ function buildServer() {
         if (!path.startsWith("references/inbox/") || path.includes("..") || path.startsWith("/")) {
           throw new Error("Invalid reference image path.");
         }
-        if (!/\\.(png|jpe?g|webp|gif)$/i.test(path)) throw new Error("Unsupported image format.");
+        if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) throw new Error("Unsupported image format.");
         const data = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
         const mime = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[path.split(".").pop().toLowerCase()];
-        const bytes = Buffer.from(data.content || "", data.encoding || "base64");
-        if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error("Image is empty or exceeds the 8 MB visual retrieval limit.");
+        let encoded = data.content;
+        if ((!encoded || data.encoding !== "base64") && data.sha) {
+          const blob = await assetFetch(`https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/blobs/${data.sha}`);
+          encoded = blob.content;
+          if (blob.encoding !== "base64") throw new Error("GitHub não retornou imagem em base64.");
+        }
+        const bytes = Buffer.from(encoded || "", "base64");
+        if (!bytes.length || bytes.length > 12 * 1024 * 1024) throw new Error("Image is empty or exceeds the 12 MB visual retrieval limit.");
         return {
           content: [
             { type: "text", text: `Imagem de referência: ${path}` },
@@ -599,6 +607,30 @@ function buildServer() {
     }
   );
 
+  if (ASSETS_ENABLED) {
+    server.tool(
+      "read_editor_draft",
+      "Read the latest PNG draft exported from the mobile RPG pixel editor. This is a working draft only, not an approved game asset.",
+      {},
+      async () => {
+        try {
+          const path = "editor-drafts/latest.png";
+          const data = await assetFetch(`${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}?ref=${ASSETS_GITHUB_BRANCH}`);
+          let encoded = data.content;
+          if ((!encoded || data.encoding !== "base64") && data.sha) {
+            const blob = await assetFetch(`${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/blobs/${data.sha}`);
+            encoded = blob.content;
+          }
+          const bytes = Buffer.from(encoded || "", "base64");
+          if (!bytes.length || bytes.length > 12 * 1024 * 1024) throw new Error("Rascunho vazio ou acima de 12 MB.");
+          return { content: [{ type: "text", text: "Rascunho atual do editor: editor-drafts/latest.png. Ainda não aprovado para uso no jogo." }, { type: "image", data: bytes.toString("base64"), mimeType: "image/png" }] };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Não foi possível ler o rascunho do editor: ${err.message}` }], isError: true };
+        }
+      }
+    );
+  }
+
   if (ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO) {
     registerAssetTools(server, { z, token: ASSETS_GITHUB_TOKEN, owner: ASSETS_GITHUB_OWNER, repo: ASSETS_GITHUB_REPO, branch: ASSETS_GITHUB_BRANCH });
   }
@@ -607,13 +639,80 @@ function buildServer() {
 
 // ---- HTTP transport (stateless, one MCP server instance per request) ----
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+// Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.
+app.use(express.json({ limit: "18mb" }));
+
+app.use("/editor", express.static("public", { index: "editor.html", fallthrough: true }));
+
+// The editor uses a dedicated credential; never expose GitHub or MCP credentials in the browser.
+app.post("/editor/api/draft", async (req, res) => {
+  if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Sincronização do editor não configurada." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Acesso não autorizado." });
+  }
+  try {
+    const payload = req.body || {};
+    const encoded = String(payload.image_base64 || "").replace(/^data:image\/png;base64,/i, "");
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return res.status(400).json({ error: "PNG em base64 inválido." });
+    const bytes = Buffer.from(encoded, "base64");
+    if (!bytes.length || bytes.length > 12 * 1024 * 1024) return res.status(413).json({ error: "PNG vazio ou acima de 12 MB." });
+    const metadata = await (await import("sharp")).default(bytes, { limitInputPixels: 24000000 }).metadata();
+    if (metadata.format !== "png" || !metadata.width || !metadata.height || metadata.width * metadata.height > 24000000) {
+      return res.status(400).json({ error: "O arquivo precisa ser um PNG válido de até 24 megapixels." });
+    }
+    const path = "editor-drafts/latest.png";
+    const url = `${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
+    const current = await fetch(`${url}?ref=${encodeURIComponent(ASSETS_GITHUB_BRANCH)}`, { headers: assetHeaders });
+    let sha;
+    if (current.ok) sha = (await current.json()).sha;
+    else if (current.status !== 404) throw new Error(`GitHub ${current.status} ao consultar rascunho.`);
+    const body = { message: "Update mobile RPG editor draft", content: bytes.toString("base64"), branch: ASSETS_GITHUB_BRANCH };
+    if (sha) body.sha = sha;
+    const saved = await fetch(url, { method: "PUT", headers: { ...assetHeaders, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!saved.ok) throw new Error(`GitHub ${saved.status}: ${(await saved.text()).slice(0, 180)}`);
+    return res.json({ ok: true, path, width: metadata.width, height: metadata.height, format: metadata.format, channels: metadata.channels, bytes: bytes.length, status: "draft_not_approved" });
+  } catch (err) {
+    console.error("Editor draft sync failed:", err.message);
+    return res.status(502).json({ error: "Não foi possível sincronizar o rascunho." });
+  }
+});
+
+app.get("/editor/api/preview", async (req, res) => {
+  if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Recepção de prévias não configurada." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) return res.status(401).json({ error: "Acesso não autorizado." });
+  try {
+    const base = `${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/`;
+    const metaRes = await fetch(base + assetRepoPath("editor-previews/latest.json") + "?ref=" + encodeURIComponent(ASSETS_GITHUB_BRANCH), { headers: assetHeaders });
+    if (metaRes.status === 404) return res.status(404).json({ error: "Claude ainda não enviou nenhuma prévia." });
+    if (!metaRes.ok) throw new Error("GitHub " + metaRes.status + " ao consultar metadados.");
+    const metaFile = await metaRes.json();
+    const metaBytes = metaFile.content && metaFile.encoding === "base64" ? Buffer.from(metaFile.content.replace(/\s/g,""),"base64") : null;
+    if (!metaBytes) throw new Error("Metadados da prévia indisponíveis.");
+    const metadata = JSON.parse(metaBytes.toString("utf8"));
+    if (!/^editor-previews\/[0-9a-f-]{36}\.png$/i.test(metadata.path || "")) throw new Error("Caminho de prévia inválido.");
+    const imageRes = await fetch(base + assetRepoPath(metadata.path) + "?ref=" + encodeURIComponent(ASSETS_GITHUB_BRANCH), { headers: assetHeaders });
+    if (!imageRes.ok) throw new Error("GitHub " + imageRes.status + " ao buscar PNG.");
+    const imageFile = await imageRes.json();
+    let encoded = imageFile.content;
+    if ((!encoded || imageFile.encoding !== "base64") && imageFile.sha) {
+      const blobRes = await fetch(`${GH_API}/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/git/blobs/${imageFile.sha}`, { headers: assetHeaders });
+      if (!blobRes.ok) throw new Error("GitHub " + blobRes.status + " ao buscar blob.");
+      const blob = await blobRes.json(); encoded = blob.content;
+    }
+    const bytes = Buffer.from(encoded || "", "base64");
+    if (!bytes.length || bytes.length > 12*1024*1024) throw new Error("PNG vazio ou acima de 12 MB.");
+    return res.json({ ...metadata, image_base64: bytes.toString("base64") });
+  } catch (err) {
+    console.error("Editor preview retrieval failed:",err.message);
+    return res.status(502).json({ error: "Não foi possível receber a prévia do Claude." });
+  }
+});
 
 app.get("/", (_req, res) => res.send("Obsidian vault MCP server is running."));
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 12 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
     const allowed = {
       ".png": "image/png",
@@ -622,10 +721,42 @@ const upload = multer({
       ".webp": "image/webp",
       ".gif": "image/gif",
     };
-    const ext = file.originalname.toLowerCase().match(/\\.[^.]+$/)?.[0];
+    const ext = file.originalname.toLowerCase().match(/\.[^.]+$/)?.[0];
     if (!ext || allowed[ext] !== file.mimetype) return cb(new Error("Formato não permitido. Use PNG, JPG, WEBP ou GIF."));
     cb(null, true);
   },
+});
+
+app.post("/editor/api/reference", (req, res) => {
+  if (!EDITOR_ACCESS_SECRET || !ASSETS_ENABLED) return res.status(503).json({ error: "Envio de referências não configurado." });
+  if (!safeSecretEqual(req.headers.authorization?.replace(/^Bearer\s+/i, ""), EDITOR_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Acesso não autorizado." });
+  }
+  upload.single("image")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Selecione uma imagem." });
+    try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(req.file.buffer, { limitInputPixels: 24000000 }).metadata();
+      if (!["png", "jpeg", "webp", "gif"].includes(meta.format) || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
+        return res.status(400).json({ error: "Imagem inválida ou acima de 24 megapixels." });
+      }
+      const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
+      const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${original}`;
+      const path = `references/inbox/${filename}`;
+      const url = `https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
+      const saved = await fetch(url, {
+        method: "PUT",
+        headers: { ...assetHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: `Add RPG reference image: ${filename}`, content: req.file.buffer.toString("base64"), branch: ASSETS_GITHUB_BRANCH })
+      });
+      if (!saved.ok) throw new Error(`GitHub ${saved.status}: ${(await saved.text()).slice(0, 180)}`);
+      return res.json({ ok: true, path, filename, width: meta.width, height: meta.height, format: meta.format, bytes: req.file.size, status: "private_reference_uploaded" });
+    } catch (error) {
+      console.error("Editor reference upload failed:", error.message);
+      return res.status(502).json({ error: "Não foi possível guardar a referência no repositório privado." });
+    }
+  });
 });
 
 function safeSecretEqual(provided, expected) {
@@ -636,31 +767,39 @@ function safeSecretEqual(provided, expected) {
 }
 
 app.get("/assets-upload", (_req, res) => {
-  if (!ASSETS_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
-  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form method="post" action="/assets-upload" enctype="multipart/form-data"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 8 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button></form></main></html>`);
+  if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens ainda não configurado no servidor.");
+  res.type("html").send(`<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Enviar referência RPG</title><style>body{font:16px system-ui;background:#171923;color:#f4f1e9;margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:#252936;padding:24px;border-radius:16px}h1{font-size:22px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:10px 0;border-radius:9px;border:1px solid #555;background:#171923;color:white}button{background:#73835b;border:0;font-weight:700}small{color:#bbb}#status{white-space:pre-wrap}</style><main><h1>Enviar imagem ao RPG Workshop</h1><p>Escolha uma imagem de referência. Ela ficará guardada no repositório privado para o Claude analisar.</p><form id="upload-form"><label>Senha de envio</label><input name="secret" type="password" autocomplete="current-password" required><label>Imagem (PNG, JPG, WEBP ou GIF)</label><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><small>Limite: 12 MB. A imagem original não será modificada.</small><button type="submit">Enviar imagem</button><p id="status" role="status"></p></form></main><script>document.getElementById("upload-form").addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector("button"),status=document.getElementById("status"),data=new FormData(form),secret=data.get("secret");data.delete("secret");button.disabled=true;status.textContent="Enviando...";try{const response=await fetch("/assets-upload",{method:"POST",headers:{Authorization:"Bearer "+secret},body:data});const body=await response.text();if(!response.ok)throw new Error(body||"Falha no envio.");status.textContent=body;form.reset();}catch(error){status.textContent=error.message;}finally{button.disabled=false;}});</script></html>`);
 });
 
 app.post("/assets-upload", (req, res) => {
-  if (!ASSETS_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
+  if (!ASSETS_UPLOAD_ENABLED) return res.status(503).send("Envio de imagens não configurado.");
+  const provided = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (!safeSecretEqual(provided, ASSETS_UPLOAD_SECRET)) {
+    return res.status(401).send("Senha incorreta. Volte e tente novamente.");
+  }
   upload.single("image")(req, res, async (err) => {
     if (err) return res.status(400).send(`Falha no envio: ${err.message}`);
-    if (!safeSecretEqual(req.body?.secret, ASSETS_UPLOAD_SECRET)) return res.status(401).send("Senha incorreta. Volte e tente novamente.");
     if (!req.file) return res.status(400).send("Nenhuma imagem foi selecionada.");
     try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(req.file.buffer, { limitInputPixels: 24000000 }).metadata();
+      const expectedMime = ({ png: "image/png", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" })[meta.format];
+      if (!expectedMime || expectedMime !== req.file.mimetype || !meta.width || !meta.height || meta.width * meta.height > 24000000) {
+        return res.status(400).send("Formato, MIME ou dimensões da imagem inválidos.");
+      }
       const original = req.file.originalname.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-90) || "referencia";
-      const ext = original.toLowerCase().match(/\\.(png|jpe?g|webp|gif)$/)?.[0];
-      if (!ext) return res.status(400).send("Extensão de imagem inválida.");
+      const ext = original.toLowerCase().match(/\.(png|jpe?g|webp|gif)$/)?.[0];
+      const expectedExt = ({ png: ".png", jpeg: [".jpg", ".jpeg"], webp: ".webp", gif: ".gif" })[meta.format];
+      if (!ext || !(Array.isArray(expectedExt) ? expectedExt.includes(ext) : ext === expectedExt)) {
+        return res.status(400).send("Extensão não corresponde ao formato real da imagem.");
+      }
       const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${original}`;
       const path = `references/inbox/${filename}`;
       const url = `https://api.github.com/repos/${ASSETS_GITHUB_OWNER}/${ASSETS_GITHUB_REPO}/contents/${assetRepoPath(path)}`;
       const ghRes = await fetch(url, {
         method: "PUT",
         headers: { ...assetHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: `Add RPG reference image: ${filename}`,
-          content: req.file.buffer.toString("base64"),
-          branch: ASSETS_GITHUB_BRANCH,
-        }),
+        body: JSON.stringify({ message: `Add RPG reference image: ${filename}`, content: req.file.buffer.toString("base64"), branch: ASSETS_GITHUB_BRANCH }),
       });
       if (!ghRes.ok) {
         const detail = await ghRes.text().catch(() => "");
@@ -673,7 +812,6 @@ app.post("/assets-upload", (req, res) => {
     }
   });
 });
-
 
 
 app.post("/mcp", async (req, res) => {
