@@ -89,13 +89,13 @@ Already present in the server repository:
 - Atomic Git Data API commits for staging updates and final publication; final publication includes original, PNG, provenance report and staging deletions in one commit with non-forced branch update.
 - Hash-bound explicit approval: the approved hash must match the exact current prepared PNG, and the confirmation phrase must match the asset ID and hash.
 
-Not yet implemented:
-- automatic staging expiration/cleanup and operational recovery after partial GitHub API failures;
-- cryptographic provenance metadata in the asset report;
-- structured analysis manifest and approved bounding-box slicing;
-- deterministic atlas packing and tile manifest;
-- TSX/TMX generation and round-trip validation;
-- automated tests and CI coverage for image edge cases.
+Current implementation status (2026-11-12):
+- Staging expiration/cleanup is implemented as dry-run-first `cleanup_stale_asset_staging`; no real cleanup has been run.
+- Atomic Git Data API persistence and bounded retry for recognized non-fast-forward conflicts are implemented. Recovery for arbitrary partial/network failures is not guaranteed; operations fail closed.
+- The MCP export orchestration tools `slice_asset_elements`, `build_asset_atlas`, and `export_tiled_files` are implemented and covered by CI tests.
+- Structured visual-analysis workflow is specified in `docs/VISUAL_FACTORY_MODULE_01.md`; the artistic analysis itself still requires model/human review and has not been validated end-to-end.
+- Automated unit/contract tests and GitHub Actions CI are implemented for the current deterministic contracts. This does not replace real image review, Android/Render testing, or Tiled application round-trip.
+- Cryptographic hashes (SHA-256) bind source/prepared files and approval. This is integrity/provenance metadata, not a digital signature or cryptographic identity attestation.
 
 ## Mobile editor draft synchronization
 
@@ -138,7 +138,7 @@ The branch now includes `asset-export.js`:
 - `createTsx`: emits a Tiled XML tileset definition after validating tile geometry against the image dimensions.
 - `createTmx`: emits an orthogonal finite map with a CSV layer only from explicit cell placements; duplicate cells, invalid GIDs and out-of-bounds coordinates are rejected.
 
-These are pure export primitives with behavioral tests; they are not yet exposed as MCP tools and do not yet persist sliced elements or atlases to staging. The current atlas packer is intended for standalone sprites/atlas metadata, while TSX tile-grid export requires a regular tileset image. Do not treat an arbitrary packed sprite atlas as a uniform tile sheet. Tiled application round-trip testing remains a required acceptance step.
+These primitives have behavioral tests and are exposed through MCP orchestration tools that persist their outputs in staging. The atlas packer is intended for standalone sprites/atlas metadata, while TSX tile-grid export requires a regular tileset image. Do not treat an arbitrary packed sprite atlas as a uniform tile sheet. Tiled application round-trip testing remains a required acceptance step.
 
 
 ## MCP export orchestration (initial)
