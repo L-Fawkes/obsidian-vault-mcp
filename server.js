@@ -642,7 +642,7 @@ const app = express();
 // Base64 expands binary images by roughly 4/3; allow a 12 MB source image plus JSON overhead.
 app.use(express.json({ limit: "18mb" }));
 
-app.use("/editor", express.static("public", { index: "editor.html", fallthrough: false }));
+app.use("/editor", express.static("public", { index: "editor.html", fallthrough: true }));
 
 // The editor uses a dedicated credential; never expose GitHub or MCP credentials in the browser.
 app.post("/editor/api/draft", async (req, res) => {
