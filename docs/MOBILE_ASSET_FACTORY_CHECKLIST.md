@@ -73,3 +73,22 @@ A persistência está implementada no código da branch, mas ainda precisa de te
 - [x] Verificação SHA-256 ao reler os artefatos.
 - [x] Fallback para Git Blobs ao recuperar arquivos acima do limite de conteúdo inline da Contents API.
 - [ ] Executar teste de sintaxe e fluxo de ponta a ponta antes de integrar à branch principal.
+
+
+## Controle programático de edição pelo Claude
+
+- [x] Adicionada ferramenta MCP `edit_asset_pixels` para operações determinísticas de pixel, retângulo preenchido/vazado e linha.
+- [x] As operações alteram somente o PNG preparado no staging; o original preservado não é alterado.
+- [x] Cada edição atualiza o hash SHA-256 e persiste o novo PNG no staging.
+- [x] O fluxo exige nova validação e prévia antes de `save_asset`; a publicação continua exigindo a frase de aprovação explícita.
+- [x] Leitura de referências maiores usa Git Blobs quando a API Contents não inclui o conteúdo inline.
+- [ ] Testar operações de edição com PNG real e verificar bordas, alpha, limites e linhas.
+- [ ] Adicionar undo/redo no lado MCP (o editor mobile já tem undo local para a camada desenhada).
+- [ ] Integrar edição por camadas e operações de seleção/recorte ao editor mobile.
+- [ ] Implementar autenticação e API própria para o editor; a rota estática atual é apenas um protótipo e não deve ser tratada como workspace compartilhado.
+
+## CI e integração
+
+- [x] Workflow GitHub Actions criado em `.github/workflows/validate.yml` para instalar dependências e executar `npm run check`.
+- [ ] Confirmar execução bem-sucedida do workflow no GitHub; a consulta de execuções disponível nesta sessão ainda não retornou uma execução associada aos commits.
+- [ ] Revisar e testar o deploy no Render antes de qualquer publicação na branch principal.
