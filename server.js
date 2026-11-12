@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import yaml from "js-yaml";
+import { registerAssetTools } from "./asset-tools.js";
 import multer from "multer";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 
@@ -598,6 +599,9 @@ function buildServer() {
     }
   );
 
+  if (ASSETS_GITHUB_TOKEN && ASSETS_GITHUB_OWNER && ASSETS_GITHUB_REPO) {
+    registerAssetTools(server, { z, token: ASSETS_GITHUB_TOKEN, owner: ASSETS_GITHUB_OWNER, repo: ASSETS_GITHUB_REPO, branch: ASSETS_GITHUB_BRANCH });
+  }
   return server;
 }
 
