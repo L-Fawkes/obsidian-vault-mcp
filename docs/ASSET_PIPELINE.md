@@ -83,7 +83,7 @@ Use one already-pixel-art reference image:
 
 Already present in the server repository:
 - Sharp-based image ingestion and preparation with actual format detection, byte/pixel limits, EXIF orientation normalization, crop, nearest-neighbor resize, chroma-key and palette remapping.
-- MCP tools prepare_asset, edit_asset_pixels, validate_asset, preview_asset and save_asset.
+- MCP tools prepare_asset, edit_asset_pixels, validate_asset, preview_asset, slice_asset_elements, build_asset_atlas, export_tiled_files and save_asset.
 - GitHub-backed durable staging in `.staging/<UUID>/` with original, prepared PNG and SHA-256 metadata.
 - SHA-256 integrity verification when staging is reloaded across stateless MCP requests.
 - Atomic Git Data API commits for staging updates and final publication; final publication includes original, PNG, provenance report and staging deletions in one commit with non-forced branch update.
@@ -139,3 +139,13 @@ The branch now includes `asset-export.js`:
 - `createTmx`: emits an orthogonal finite map with a CSV layer only from explicit cell placements; duplicate cells, invalid GIDs and out-of-bounds coordinates are rejected.
 
 These are pure export primitives with behavioral tests; they are not yet exposed as MCP tools and do not yet persist sliced elements or atlases to staging. The current atlas packer is intended for standalone sprites/atlas metadata, while TSX tile-grid export requires a regular tileset image. Do not treat an arbitrary packed sprite atlas as a uniform tile sheet. Tiled application round-trip testing remains a required acceptance step.
+
+
+## MCP export orchestration (initial)
+
+The MCP server now exposes:
+- `slice_asset_elements`: takes user-confirmed rectangles and persists each crop plus a source-hash-bound manifest under the asset staging directory.
+- `build_asset_atlas`: verifies the manifest is tied to the current prepared PNG, verifies each crop SHA-256, and persists the deterministic atlas PNG and manifest in staging.
+- `export_tiled_files`: validates and writes TSX, plus an optional TMX only when explicit map dimensions and placements are supplied. Outputs remain in staging and are not production-published.
+
+The TSX tool accepts a caller-supplied image source and dimensions; the caller must ensure the image actually exists at that path in the eventual project. A packed irregular sprite atlas is not automatically suitable as a regular grid TSX tileset. No TMX placements are inferred. The user must review the generated files in Tiled before any production save.
