@@ -26,5 +26,5 @@ test("legacy upload requires actual image format, MIME, and filename extension t
   assert.match(route, /expectedMime !== req\.file\.mimetype/);
   assert.match(route, /expectedExt/);
   assert.match(route, /meta\.width \* meta\.height > 24000000/);
-  assert.match(route, /fileSize: 12 \* 1024 \* 1024/);
+  assert.match(source, /fileSize: 12 \\* 1024 \\* 1024/);
 });
