@@ -46,3 +46,13 @@ test("MCP exposes confirmed slicing, staged atlas, and explicit Tiled export too
 test("TMX export rejects GIDs beyond declared tileset count", () => {
   assert.match(source, /placements\.some\(p=>p\.gid>args\.tile_count\)/);
 });
+
+test("staging cleanup is dry-run by default and protects malformed or recent metadata", () => {
+  assert.match(source, /server\.tool\("cleanup_stale_asset_staging"/);
+  assert.match(source, /dry_run\?\?true/);
+  assert.match(source, /ttl_days\?\?30/);
+  assert.match(source, /tree\.truncated\)throw new Error/);
+  assert.match(source, /created>=cutoff/);
+  assert.match(source, /path!==stagePath\(meta\.id,"metadata\.json"\)/);
+  assert.match(source, /commitFiles\(files,"Expire stale RPG asset staging/);
+});
