@@ -268,6 +268,7 @@ export function registerAssetTools(server, cfg) {
         const tsx=createTsx({name:args.tileset_name,imageSource:args.image_source,imageWidth:args.image_width,imageHeight:args.image_height,tileWidth:args.tile_width,tileHeight:args.tile_height,columns:args.columns,tileCount:args.tile_count,spacing:args.spacing??0,margin:args.margin??0});
         const stem=cleanName(args.tileset_name),files=[{path:stagePath(args.asset_id,"exports/"+stem+".tsx"),bytes:Buffer.from(tsx)}];
         if(args.map){
+          if(args.map.placements.some(p=>p.gid>args.tile_count))throw new Error("GID informado excede tile_count do TSX.");
           const tmx=createTmx({width:args.map.width,height:args.map.height,tileWidth:args.tile_width,tileHeight:args.tile_height,tilesetSource:stem+".tsx",placements:args.map.placements});
           files.push({path:stagePath(args.asset_id,"exports/"+stem+".tmx"),bytes:Buffer.from(tmx)});
         }
