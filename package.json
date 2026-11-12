@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check asset-tools.js && node --check test/asset-contract.test.js && node --check test/editor-contract.test.js",
+    "check": "node --check server.js && node --check asset-tools.js && node --check asset-export.js && node --check test/asset-contract.test.js && node --check test/asset-export.test.js && node --check test/editor-contract.test.js",
     "test": "node --test"
   },
   "dependencies": {
