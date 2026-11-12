@@ -68,14 +68,14 @@ export function registerAssetTools(server, cfg) {
     if (!deleted.ok) throw new Error("GitHub " + deleted.status + " ao remover " + path);
   }
   function stagePath(id, name) { return `${STAGING_PREFIX}/${id}/${name}`; }
-  async function saveStage(a) {
+  async function saveStage(a, { includeOriginal = true } = {}) {
     const meta = {
       id:a.id, name:a.name, width:a.width, height:a.height, format:a.format,
       sourceWidth:a.sourceWidth, sourceHeight:a.sourceHeight, options:a.options,
       originalSha256:sha256(a.original), outputSha256:sha256(a.output),
       createdAt:new Date().toISOString()
     };
-    await put(stagePath(a.id,"original.bin"),a.original,"Stage original RPG asset "+a.id);
+    if (includeOriginal) await put(stagePath(a.id,"original.bin"),a.original,"Stage original RPG asset "+a.id);
     await put(stagePath(a.id,"prepared.png"),a.output,"Stage prepared RPG asset "+a.id);
     await put(stagePath(a.id,"metadata.json"),Buffer.from(JSON.stringify(meta)),"Stage metadata RPG asset "+a.id);
   }
@@ -187,7 +187,7 @@ export function registerAssetTools(server, cfg) {
         }
         const output=await sharp(data,{raw:info}).png().toBuffer();
         const updated={...a,output,outputSha256:sha256(output)};
-        await saveStage(updated);
+        // The immutable source bytes are already staged; persist only the changed PNG and metadata.\n        await saveStage(updated, { includeOriginal: false });
         return result(JSON.stringify({asset_id,status:"edited_staging_only",operations:operations.length,width:a.width,height:a.height,output_sha256:updated.outputSha256,next:["validate_asset","preview_asset","aguardar aprovação explícita","save_asset"]},null,2));
       }catch(e){return result("edit_asset_pixels: "+e.message,true);}
     });
