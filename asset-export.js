@@ -60,7 +60,7 @@ export function createTsx({name,imageSource,imageWidth,imageHeight,tileWidth,til
 }
 
 export function createTmx({width,height,tileWidth,tileHeight,tilesetSource,firstGid=1,placements}) {
-  if(![width,height,tileWidth,tileHeight,firstGid].every(Number.isInteger)||[width,height,tileWidth,tileHeight,firstGid].some(v=>v<1)||!Array.isArray(placements)) throw new Error("Parâmetros TMX inválidos.");
+  if(![width,height,tileWidth,tileHeight,firstGid].every(Number.isInteger)||[width,height,tileWidth,tileHeight,firstGid].some(v=>v<1)||width*height>24000000||!Array.isArray(placements)||placements.length>100000||!tilesetSource) throw new Error("Parâmetros TMX inválidos ou acima dos limites.");
   const data=Array(width*height).fill(0), seen=new Set();
   for(const p of placements){
     if(!Number.isInteger(p.x)||!Number.isInteger(p.y)||!Number.isInteger(p.gid)||p.x<0||p.y<0||p.x>=width||p.y>=height||p.gid<firstGid) throw new Error("Posicionamento TMX inválido.");
