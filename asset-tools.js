@@ -225,7 +225,11 @@ export function registerAssetTools(server, cfg) {
           {name:"alpha_channel",passed:true,detail:"Canal alpha presente"},
           {name:"grid_alignment",passed:!grid_size||(a.width%grid_size===0&&a.height%grid_size===0),detail:grid_size?"Grade "+grid_size+"px":"Não solicitado"}
         ];
-        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number(1  server.tool("save_asset","Publica original, PNG e relatório em um único commit. A aprovação fica vinculada ao SHA-256 exato da imagem visualizada.",
+        return result(JSON.stringify({asset_id,compatible:checks.every(x=>x.passed),checks,transparency:{transparent_pixels:transparent,total_pixels:a.width*a.height,percent:Number((100*transparent/(a.width*a.height)).toFixed(2))},null,2));
+      }catch(e){return result("validate_asset: "+e.message,true);}
+    });
+
+  server.tool("save_asset","Publica original, PNG e relatório em um único commit. A aprovação fica vinculada ao SHA-256 exato da imagem visualizada.",
     {asset_id:z.string().uuid(),approved_sha256:z.string().regex(/^[a-f0-9]{64}$/),user_approval:z.string().min(80),destination_folder:z.enum(["sprites","tilesets","maps","exports"])},
     async ({asset_id,approved_sha256,user_approval,destination_folder})=>{
       try{
